@@ -18,6 +18,7 @@ from torch.autograd import Variable
 
 import numpy as np
 import matplotlib.pyplot as plt
+import torch.utils.data
 
 import pickle
 import os
@@ -26,8 +27,8 @@ from shutil import copyfile
 
 
 def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, modeltype, Dataset='HR'):
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
-    validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=2)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+    validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
     
     
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad,RSVQA.parameters()), lr=learning_rate)
@@ -82,7 +83,6 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                     viz_answer = encoder_answers.decode([answer[0]])
                     viz_pred = encoder_answers.decode([pred[0]])
     
-    
                     f1_axes[0].imshow(viz_img)
                     f1_axes[0].axis('off')
                     f1_axes[0].set_title(viz_question)
@@ -90,10 +90,18 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                         att_h = f1_axes[1].imshow(viz_att)
                     #fig1.colorbar(att_h,ax=f1_axes[1])
                     f1_axes[1].axis('off')
-                    f1_axes[1].set_title(viz_answer)
+                    f1_axes[1].set_title("answer: " + viz_answer + "\npred: " + viz_pred)
                     text = f1_axes[1].text(0.5,-0.1,viz_pred, size=12, horizontalalignment='center',
                                               verticalalignment='center', transform=f1_axes[1].transAxes)
-                    plt.savefig('/tmp/VQA.png')
+                    
+                    work_dir = os.getcwd()
+                    viz_dir = work_dir + '/tmp'
+                    if not os.path.exists(viz_dir):
+                        os.makedirs(viz_dir)
+
+                    viz_path = os.path.join(viz_dir, f'VQA_ep_{epoch}_img_{i}.png')
+                    # add text to image
+                    plt.savefig(viz_path)
                     plt.close(fig1)
                         
             valLoss.append(runningLoss / len(validate_dataset))
@@ -115,6 +123,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
 
         RSVQA.train()
         runningLoss = 0
+        print('start training')
         for i, data in enumerate(train_loader, 0):
             if i % 1000 == 999:
                 print(i/len(train_loader))
@@ -142,10 +151,10 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
 
 
 if __name__ == '__main__':
-    disable_log = True
-    batch_size = 70
-    num_epochs = 150
-    learning_rate = 0.00001
+    disable_log = False
+    batch_size = 200
+    num_epochs = 2
+    learning_rate = 0.0001
     ratio_images_to_use = 1
     modeltype = 'Simple'
     Dataset = 'HR'
@@ -162,8 +171,17 @@ if __name__ == '__main__':
         imagesvalJSON = os.path.join(data_path, 'LR_split_val_images.json')
         images_path = os.path.join(data_path, 'data/')
     else:
-        data_path = '/raid/home/sylvain/RSVQA_USGS_data/'
-        images_path = os.path.join(data_path, 'dataUSGS/')
+        work_dir = os.getcwd()
+        data_path = work_dir + '/data'
+        images_path = os.path.join(data_path + '/images/')
+        allquestionsJSON = os.path.join(data_path + '/text/USGSquestions.json')
+        allanswersJSON = os.path.join(data_path + '/text/USGSanswers.json')
+        questionsJSON = os.path.join(data_path + '/text/USGS_split_train_questions.json')
+        questionsvalJSON = os.path.join(data_path + '/text/USGS_split_val_questions.json')
+        answersJSON = os.path.join(data_path + '/text/USGS_split_train_answers.json')
+        answersvalJSON = os.path.join(data_path + '/text/USGS_split_val_answers.json')
+        imagesJSON = os.path.join(data_path + '/text/USGS_split_train_images.json')
+        imagesvalJSON = os.path.join(data_path + '/text/USGS_split_val_images.json')
     encoder_questions = VocabEncoder.VocabEncoder(allquestionsJSON, questions=True)
     if Dataset == "LR":
         encoder_answers = VocabEncoder.VocabEncoder(allanswersJSON, questions=False, range_numbers = True)

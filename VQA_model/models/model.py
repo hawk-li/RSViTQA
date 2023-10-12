@@ -11,6 +11,7 @@ import torch.nn as nn
 import models.seq2vec
 import torch.nn.functional as F
 import torch
+import os
 
 VISUAL_OUT = 2048
 QUESTION_OUT = 2400
@@ -31,7 +32,9 @@ class VQAModel(nn.Module):
         self.dropoutV = torch.nn.Dropout(DROPOUT_V)
         self.dropoutQ = torch.nn.Dropout(DROPOUT_Q)
         self.dropoutF = torch.nn.Dropout(DROPOUT_F)
-        self.seq2vec = models.seq2vec.factory(self.vocab_questions, {'arch': 'skipthoughts', 'dir_st': 'data/skip-thoughts', 'type': 'BayesianUniSkip', 'dropout': 0.25, 'fixed_emb': False})
+        work_dir = work_dir = os.getcwd()
+        dir_st = work_dir + '/data/skip-thoughts'
+        self.seq2vec = models.seq2vec.factory(self.vocab_questions, {'arch': 'skipthoughts', 'dir_st': dir_st, 'type': 'BayesianUniSkip', 'dropout': 0.25, 'fixed_emb': False})
         for param in self.seq2vec.parameters():
             param.requires_grad = False
         self.linear_q = nn.Linear(QUESTION_OUT, FUSION_IN)

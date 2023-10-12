@@ -4,7 +4,6 @@ matplotlib
 scikit-image
 scikit-learn
 pickles
-torchvision
 #skipthoughts
 
 #git clone https://github.com/Cadene/skip-thoughts.torch.git
