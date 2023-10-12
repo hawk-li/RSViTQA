@@ -12,11 +12,11 @@ Extract and move the images to the `data/images` folder.
 Download the pretrained skip-thoughts model files:
 
 
-- ['dictionary']('http://www.cs.toronto.edu/~rkiros/models/dictionary.txt')
-- ['utable']('http://www.cs.toronto.edu/~rkiros/models/utable.npy')
-- ['uni_skip']('http://www.cs.toronto.edu/~rkiros/models/uni_skip.npz')
-- ['btable']('http://www.cs.toronto.edu/~rkiros/models/btable.npy')
-- ['bi_skip']('http://www.cs.toronto.edu/~rkiros/models/bi_skip.npz')
+- [dictionary]('http://www.cs.toronto.edu/~rkiros/models/dictionary.txt')
+- [utable]('http://www.cs.toronto.edu/~rkiros/models/utable.npy')
+- [uni_skip]('http://www.cs.toronto.edu/~rkiros/models/uni_skip.npz')
+- [btable]('http://www.cs.toronto.edu/~rkiros/models/btable.npy')
+- [bi_skip]('http://www.cs.toronto.edu/~rkiros/models/bi_skip.npz')
 
 and place them in the `data/skip-thoughts` folder.
 
