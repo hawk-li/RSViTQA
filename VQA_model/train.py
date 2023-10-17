@@ -153,8 +153,8 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
 if __name__ == '__main__':
     disable_log = False
     batch_size = 200
-    num_epochs = 2
-    learning_rate = 0.0001
+    num_epochs = 35
+    learning_rate = 0.00001
     ratio_images_to_use = 1
     modeltype = 'Simple'
     Dataset = 'HR'
@@ -168,7 +168,7 @@ if __name__ == '__main__':
         imagesJSON = os.path.join(data_path, 'LR_split_train_images.json')
         questionsvalJSON = os.path.join(data_path, 'LR_split_val_questions.json')
         answersvalJSON = os.path.join(data_path, 'LR_split_val_answers.json')
-        imagesvalJSON = os.path.join(data_path, 'LR_split_val_images.json')
+        imagesvalJSON = os.path.join(data_path  , 'LR_split_val_images.json')
         images_path = os.path.join(data_path, 'data/')
     else:
         work_dir = os.getcwd()

@@ -52,7 +52,8 @@ def do_confusion_matrix(all_mat, old_vocab, new_vocab, dataset):
         
 
 def get_vocab(dataset):
-    data_path = '../AutomaticDB/'
+    work_dir = os.getcwd()
+    data_path = work_dir + '/data/text'
     if dataset == "LR":
         allanswersJSON = os.path.join(data_path, 'answers.json')
         encoder_answers = VocabEncoder.VocabEncoder(allanswersJSON, questions=False, range_numbers = True)
@@ -65,29 +66,30 @@ def get_vocab(dataset):
 def run(experiment, dataset, shuffle=False, num_batches=-1, save_output=False):
     print ('---' + experiment + '---')
     batch_size = 100
-    data_path = '../AutomaticDB/'
+    work_dir = os.getcwd()
+    data_path = work_dir + '/data'
     if dataset == "LR":
-        allquestionsJSON = os.path.join(data_path, 'questions.json')
-        allanswersJSON = os.path.join(data_path, 'answers.json')
-        questionsJSON = os.path.join(data_path, 'LR_split_test_questions.json')
-        answersJSON = os.path.join(data_path, 'LR_split_test_answers.json')
-        imagesJSON = os.path.join(data_path, 'LR_split_test_images.json')
-        images_path = os.path.join(data_path, 'data/')
+        allquestionsJSON = os.path.join(data_path, 'text/questions.json')
+        allanswersJSON = os.path.join(data_path, 'text/answers.json')
+        questionsJSON = os.path.join(data_path, 'text/LR_split_test_questions.json')
+        answersJSON = os.path.join(data_path, 'text/LR_split_test_answers.json')
+        imagesJSON = os.path.join(data_path, 'text/LR_split_test_images.json')
+        images_path = os.path.join(data_path, 'images')
         encoder_questions = VocabEncoder.VocabEncoder(allquestionsJSON, questions=True)
         encoder_answers = VocabEncoder.VocabEncoder(allanswersJSON, questions=False, range_numbers = True)
         patch_size = 256
     else:
-        allquestionsJSON = os.path.join(data_path, 'USGSquestions.json')
-        allanswersJSON = os.path.join(data_path, 'USGSanswers.json')
+        allquestionsJSON = os.path.join(data_path, 'text/USGSquestions.json')
+        allanswersJSON = os.path.join(data_path, 'text/USGSanswers.json')
         if dataset == "HR":
-            questionsJSON = os.path.join(data_path, 'USGS_split_test_questions.json')
-            answersJSON = os.path.join(data_path, 'USGS_split_test_answers.json')
-            imagesJSON = os.path.join(data_path, 'USGS_split_test_images.json')
+            questionsJSON = os.path.join(data_path, 'text/USGS_split_test_questions.json')
+            answersJSON = os.path.join(data_path, 'text/USGS_split_test_answers.json')
+            imagesJSON = os.path.join(data_path, 'text/USGS_split_test_images.json')
         else:
-            questionsJSON = os.path.join(data_path, 'USGS_split_test_phili_questions.json')
-            answersJSON = os.path.join(data_path, 'USGS_split_test_phili_answers.json')
-            imagesJSON = os.path.join(data_path, 'USGS_split_test_phili_images.json')
-        images_path = os.path.join(data_path, 'dataUSGS/')
+            questionsJSON = os.path.join(data_path, 'text/USGS_split_test_phili_questions.json')
+            answersJSON = os.path.join(data_path, 'text/USGS_split_test_phili_answers.json')
+            imagesJSON = os.path.join(data_path, 'text/USGS_split_test_phili_images.json')
+        images_path = os.path.join(data_path, 'images')
         encoder_questions = VocabEncoder.VocabEncoder(allquestionsJSON, questions=True)
         encoder_answers = VocabEncoder.VocabEncoder(allanswersJSON, questions=False, range_numbers = False)
         patch_size = 512
@@ -106,7 +108,7 @@ def run(experiment, dataset, shuffle=False, num_batches=-1, save_output=False):
         T.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
       ])
     test_dataset = VQALoader.VQALoader(images_path, imagesJSON, questionsJSON, answersJSON, encoder_questions, encoder_answers, train=False, ratio_images_to_use=1, transform=transform, patch_size = patch_size)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
     if dataset == 'LR':
         countQuestionType = {'rural_urban': 0, 'presence': 0, 'count': 0, 'comp': 0}
@@ -142,7 +144,7 @@ def run(experiment, dataset, shuffle=False, num_batches=-1, save_output=False):
             confusionMatrix[answer[j], pred[j]] += 1
             
         if save_output:
-            out_path = 'output_' + experiment + '_' + dataset
+            out_path = os.path.join(work_dir, 'output')
             if not os.path.exists(out_path):
                 os.mkdir(out_path)
             for j in range(batch_size):
@@ -152,6 +154,8 @@ def run(experiment, dataset, shuffle=False, num_batches=-1, save_output=False):
                 viz_pred = encoder_answers.decode([pred[j]])
             
                 imname = str(i * batch_size + j) + '_q_' + viz_question + '_gt_' + viz_answer + '_pred_' + viz_pred + '.png'
+                # replace special characters
+                imname = imname.replace('?', '')
                 plt.imsave(os.path.join(out_path, imname), viz_img)
     
     Accuracies = {'AA': 0}
@@ -175,12 +179,13 @@ def run(experiment, dataset, shuffle=False, num_batches=-1, save_output=False):
 #         'HRPhili': ['65f94a4f7ccd491da362f73e46795d26', '988853ae5d5e441695f98ee506021bdf', '3bfd251cafb74d379d02bf59d383381a'],
 #         'HRs': ['65f94a4f7ccd491da362f73e46795d26', '988853ae5d5e441695f98ee506021bdf', '3bfd251cafb74d379d02bf59d383381a'],
 #         'HRPhilis': ['65f94a4f7ccd491da362f73e46795d26', '988853ae5d5e441695f98ee506021bdf', '3bfd251cafb74d379d02bf59d383381a']}
-expes = {'LR': ['427f37d306ef4d03bb1406d5cd20336f', 'bd1387960b624257b9a50924d8134be6', '899e11235c624ec9bbb66e26da52d6fc'],
-         'HR': ['65f94a4f7ccd491da362f73e46795d26', '988853ae5d5e441695f98ee506021bdf', '3bfd251cafb74d379d02bf59d383381a'],
-         'HRPhili': ['65f94a4f7ccd491da362f73e46795d26', '988853ae5d5e441695f98ee506021bdf', '3bfd251cafb74d379d02bf59d383381a']}
-run('65f94a4f7ccd491da362f73e46795d26', 'HR', num_batches=5, save_output=True)
-run('65f94a4f7ccd491da362f73e46795d26', 'HRPhili', num_batches=5, save_output=True)
-run('427f37d306ef4d03bb1406d5cd20336f', 'LR', num_batches=5, save_output=True)
+expes = {
+         'HR': ['RSVQA'],
+         'HRPhili': ['RSVQA'],
+}
+#run('RSVQA', 'HR', num_batches=5, save_output=True)
+#run('65f94a4f7ccd491da362f73e46795d26', 'HRPhili', num_batches=5, save_output=True)
+#run('427f37d306ef4d03bb1406d5cd20336f', 'LR', num_batches=5, save_output=True)
 for dataset in expes.keys():
     acc = []
     mat = []
@@ -193,8 +198,8 @@ for dataset in expes.keys():
             np.save('accuracies_' + dataset + '_' + experiment_name, tmp_acc)
             np.save('confusion_matrix_' + dataset + '_' + experiment_name, tmp_mat)
         else:
-            tmp_acc = np.load('accuracies_' + dataset + '_' + experiment_name + '.npy')[()]
-            tmp_mat = np.load('confusion_matrix_' + dataset + '_' + experiment_name + '.npy')[()]
+            tmp_acc = np.load('accuracies_' + dataset + '_' + experiment_name + '.npy', allow_pickle=True)[()]
+            tmp_mat = np.load('confusion_matrix_' + dataset + '_' + experiment_name + '.npy', allow_pickle=True)[()]
         acc.append(tmp_acc)
         mat.append(tmp_mat)
         
