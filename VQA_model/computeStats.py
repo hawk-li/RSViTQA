@@ -107,7 +107,7 @@ def run(experiment, dataset, shuffle=False, num_batches=-1, save_output=False):
         T.ToTensor(),            
         T.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
       ])
-    test_dataset = VQALoader.VQALoader(images_path, imagesJSON, questionsJSON, answersJSON, encoder_questions, encoder_answers, train=False, ratio_images_to_use=1, transform=transform, patch_size = patch_size)
+    test_dataset = VQALoader.VQADataset(images_path, imagesJSON, questionsJSON, answersJSON, encoder_questions, encoder_answers, train=False, ratio_images_to_use=1, transform=transform, patch_size = patch_size)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
     if dataset == 'LR':
