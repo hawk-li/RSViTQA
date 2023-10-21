@@ -7,6 +7,7 @@
 # Script principal d'apprentissage
 
 import matplotlib
+import tqdm
 matplotlib.use('Agg')
 
 from models import model
@@ -27,8 +28,8 @@ from shutil import copyfile
 
 
 def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, modeltype, Dataset='HR'):
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
-    validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
+    validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
     
     
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad,RSVQA.parameters()), lr=learning_rate)
@@ -47,17 +48,19 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
         print('start training')
         for i, data in enumerate(train_loader, 0):
             if i % (len(train_loader)//10) == (len(train_loader)//10 - 1):
-                print('Training progress: %d %%' % (100*i/len(train_loader)))
+                timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+                print('Training progress: {}%, {}'.format(100*i/len(train_loader), timestamp))
+
             question, answer, image, _ = data
             #question = torch.squeeze(question, 1).to("cuda")
-            question = question.to("cuda")
-            print(answer.shape)
-            answer = answer.to("cuda").resize_(question.shape[0])
-            print(question.shape, answer.shape)
-            image = torch.squeeze(image, 1).to("cuda")
+            # question = question.to("cuda")
+            #answer = answer.reshape(question.shape[0])
+            #answer = torch.argmax(answer, dim=1)
+            #image = torch.squeeze(image, 1)
+            answer = answer.squeeze(1)
 
             pred = RSVQA(image,question)
-            #print(pred.shape, answer.shape)
+
             loss = criterion(pred, answer)
             optimizer.zero_grad()
             loss.backward()
@@ -68,7 +71,8 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             
         trainLoss.append(runningLoss / len(train_dataset))
         print('epoch #%d loss: %.3f' % (epoch, trainLoss[epoch]))
-                
+        # print current time
+        print(datetime.datetime.now())      
         torch.save(RSVQA.state_dict(), 'RSVQA_model_epoch_' + str(epoch) + '.pth')
 
         with torch.no_grad():
@@ -82,18 +86,15 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             for i, data in enumerate(validate_loader, 0):
                 if i % 1000 == 999:
                     print(i/len(validate_loader))
-                question, answer, image, type_str, image_original = data
-                question = Variable(question.long()).cuda()
-                answer = Variable(answer.long()).cuda().resize_(question.shape[0])
-                image = Variable(image.float()).cuda()
-                if modeltype == 'MCB':
-                    pred, att_map = RSVQA(image,question)
-                else:
-                    pred = RSVQA(image,question)
+                question, answer, image, type_str = data
+                
+                answer = answer.squeeze(1)
+                
+                pred = RSVQA(image,question)
                 loss = criterion(pred, answer)
                 runningLoss += loss.cpu().item() * question.shape[0]
                 
-                answer = answer.cpu().numpy()
+                #answer = answer.cpu().numpy()
                 pred = np.argmax(pred.cpu().detach().numpy(), axis=1)
                 for j in range(answer.shape[0]):
                     countQuestionType[type_str[j]] += 1
@@ -115,11 +116,13 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                 
             OA.append(numRightQuestions *1.0 / numQuestions)
             AA.append(currentAA * 1.0 / 4)
+            print('OA: %.3f' % (OA[epoch]))
+            print('AA: %.3f' % (AA[epoch]))
 
 
 if __name__ == '__main__':
     disable_log = False
-    batch_size = 200
+    batch_size = 300
     num_epochs = 35
     learning_rate = 0.00001
     ratio_images_to_use = 1

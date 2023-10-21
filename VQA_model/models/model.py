@@ -58,27 +58,32 @@ class VQAModel(nn.Module):
         self.linear_classif2 = nn.Linear(FUSION_HIDDEN, self.num_classes)
         
     def forward(self, input_v, input_q):
-        
+        #input_v = torch.squeeze(input_v, 1)
         x_v = self.visual(input_v).view(-1, VISUAL_OUT)
         x_v = self.dropoutV(x_v)
         x_v = self.linear_v(x_v)
         x_v = nn.Tanh()(x_v)
-        x_v = x_v.unsqueeze(1)
-        print(x_v.shape)
-        
+        #x_v = torch.unsqueeze(x_v, 1)
+        #print(input_q.shape)
+        # print datatype of input_q
+        #input_q = input_q.float()
+        #print(input_q.dtype)
         # x_q = self.seq2vec(input_q)
         x_q = self.dropoutV(input_q)
         x_q = self.linear_q(x_q)
         x_q = nn.Tanh()(x_q)
-        print(x_q.shape)
         
         x = torch.mul(x_v, x_q)
+        x = torch.squeeze(x, 1)
         x = nn.Tanh()(x)
         x = self.dropoutF(x)
         x = self.linear_classif1(x)
         x = nn.Tanh()(x)
         x = self.dropoutF(x)
         x = self.linear_classif2(x)
-        
+        # print("Shape of x_v:", x_v.shape)
+        # print("Shape of x_q:", x_q.shape)
+        # print("Shape of x after mul:", x.shape)
+        # print("Shape of output:", x.shape)
         return x
         
