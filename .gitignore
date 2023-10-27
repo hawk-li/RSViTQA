@@ -4,6 +4,7 @@
 .python-version
 **/tmp/**
 **.pth
+**.txt
 /output/**
 accuracies_**
 confusion_matrix_**

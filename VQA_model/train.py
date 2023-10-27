@@ -28,8 +28,8 @@ from shutil import copyfile
 
 
 def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, modeltype, Dataset='HR'):
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
-    validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=8, pin_memory=True)
+    validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=8, pin_memory=True)
     
     
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad,RSVQA.parameters()), lr=learning_rate)
@@ -45,7 +45,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
     for epoch in range(num_epochs):
         RSVQA.train()
         runningLoss = 0
-        print('start training')
+        print('training epoch #%d' % (epoch))
         for i, data in enumerate(train_loader, 0):
             if i % (len(train_loader)//10) == (len(train_loader)//10 - 1):
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
@@ -53,7 +53,9 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
 
             question, answer, image, _ = data
             #question = torch.squeeze(question, 1).to("cuda")
-            # question = question.to("cuda")
+            question = question.to("cuda")
+            answer = answer.to("cuda")
+            image = image.to("cuda")
             #answer = answer.reshape(question.shape[0])
             #answer = torch.argmax(answer, dim=1)
             #image = torch.squeeze(image, 1)
@@ -67,6 +69,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             optimizer.step()
             
             runningLoss += loss.cpu().item() * question.shape[0]
+        torch.cuda.empty_cache()
         
             
         trainLoss.append(runningLoss / len(train_dataset))
@@ -89,6 +92,9 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                 question, answer, image, type_str = data
                 
                 answer = answer.squeeze(1)
+                question = question.to("cuda")
+                answer = answer.to("cuda")
+                image = image.to("cuda")
                 
                 pred = RSVQA(image,question)
                 loss = criterion(pred, answer)
@@ -100,9 +106,10 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                     countQuestionType[type_str[j]] += 1
                     if answer[j] == pred[j]:
                         rightAnswerByQuestionType[type_str[j]] += 1
-                        
+            torch.cuda.empty_cache()
             valLoss.append(runningLoss / len(validate_dataset))
             print('epoch #%d val loss: %.3f' % (epoch, valLoss[epoch]))
+            print(datetime.datetime.now())  
         
             numQuestions = 0
             numRightQuestions = 0
@@ -121,8 +128,9 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
 
 
 if __name__ == '__main__':
+    torch.multiprocessing.set_start_method('spawn')
     disable_log = False
-    batch_size = 300
+    batch_size = 600
     num_epochs = 35
     learning_rate = 0.00001
     ratio_images_to_use = 1

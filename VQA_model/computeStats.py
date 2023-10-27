@@ -68,46 +68,19 @@ def run(experiment, dataset, shuffle=False, num_batches=-1, save_output=False):
     batch_size = 100
     work_dir = os.getcwd()
     data_path = work_dir + '/data'
-    if dataset == "LR":
-        allquestionsJSON = os.path.join(data_path, 'text/questions.json')
-        allanswersJSON = os.path.join(data_path, 'text/answers.json')
-        questionsJSON = os.path.join(data_path, 'text/LR_split_test_questions.json')
-        answersJSON = os.path.join(data_path, 'text/LR_split_test_answers.json')
-        imagesJSON = os.path.join(data_path, 'text/LR_split_test_images.json')
-        images_path = os.path.join(data_path, 'images')
-        encoder_questions = VocabEncoder.VocabEncoder(allquestionsJSON, questions=True)
-        encoder_answers = VocabEncoder.VocabEncoder(allanswersJSON, questions=False, range_numbers = True)
-        patch_size = 256
-    else:
-        allquestionsJSON = os.path.join(data_path, 'text/USGSquestions.json')
-        allanswersJSON = os.path.join(data_path, 'text/USGSanswers.json')
-        if dataset == "HR":
-            questionsJSON = os.path.join(data_path, 'text/USGS_split_test_questions.json')
-            answersJSON = os.path.join(data_path, 'text/USGS_split_test_answers.json')
-            imagesJSON = os.path.join(data_path, 'text/USGS_split_test_images.json')
-        else:
-            questionsJSON = os.path.join(data_path, 'text/USGS_split_test_phili_questions.json')
-            answersJSON = os.path.join(data_path, 'text/USGS_split_test_phili_answers.json')
-            imagesJSON = os.path.join(data_path, 'text/USGS_split_test_phili_images.json')
-        images_path = os.path.join(data_path, 'images')
-        encoder_questions = VocabEncoder.VocabEncoder(allquestionsJSON, questions=True)
-        encoder_answers = VocabEncoder.VocabEncoder(allanswersJSON, questions=False, range_numbers = False)
-        patch_size = 512
 
-    weight_file = 'Model' + experiment + '.pth'
-    network = model.VQAModel(encoder_questions.getVocab(), encoder_answers.getVocab(), input_size = patch_size).cuda()
+    images_path = os.path.join(data_path, 'image_representations')
+    text_path = os.path.join(data_path, 'text_representations/test')
+    patch_size = 512
+
+    weight_file = experiment + '.pth'
+    network = model.VQAModel(input_size = patch_size).cuda()
     state = network.state_dict()
     state.update(torch.load(weight_file))
     network.load_state_dict(state)
     network.eval().cuda()
     
-    IMAGENET_MEAN = [0.485, 0.456, 0.406]
-    IMAGENET_STD = [0.229, 0.224, 0.225]
-    transform = T.Compose([
-        T.ToTensor(),            
-        T.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
-      ])
-    test_dataset = VQALoader.VQADataset(images_path, imagesJSON, questionsJSON, answersJSON, encoder_questions, encoder_answers, train=False, ratio_images_to_use=1, transform=transform, patch_size = patch_size)
+    test_dataset = VQALoader.VQADataset(text_path, images_path)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
     if dataset == 'LR':
@@ -116,7 +89,8 @@ def run(experiment, dataset, shuffle=False, num_batches=-1, save_output=False):
     else:
         countQuestionType = {'area': 0, 'presence': 0, 'count': 0, 'comp': 0}
         rightAnswerByQuestionType = {'area': 0, 'presence': 0, 'count': 0, 'comp': 0}
-    confusionMatrix = np.zeros((len(encoder_answers.getVocab()), len(encoder_answers.getVocab())))
+    encoder_answers = get_vocab(dataset)
+    confusionMatrix = np.zeros((len(encoder_answers), len(encoder_answers)))
     
     for i, data in enumerate(test_loader, 0):
         if num_batches == 0:
@@ -124,14 +98,15 @@ def run(experiment, dataset, shuffle=False, num_batches=-1, save_output=False):
         num_batches -= 1
         if i % 100 == 99:
             print(float(i) / len(test_loader))
-        question, answer, image, type_str, image_original = data
-        question = Variable(question.long()).cuda()
-        answer = Variable(answer.long()).cuda().resize_(question.shape[0])
-        if shuffle:
-            order = np.array(range(image.shape[0]))
-            np.random.shuffle(order)
-            image[np.array(range(image.shape[0]))] = image[order]
-        image = Variable(image.float()).cuda()
+        question, answer, image, type_str = data
+        answer = answer.squeeze(1).to("cuda")
+        question = question.to("cuda")
+        image = image.to("cuda")
+        # if shuffle:
+        #     order = np.array(range(image.shape[0]))
+        #     np.random.shuffle(order)
+        #     image[np.array(range(image.shape[0]))] = image[order]
+        # image = Variable(image.float()).cuda()
         pred = network(image,question)
         
         answer = answer.cpu().numpy()
@@ -143,20 +118,20 @@ def run(experiment, dataset, shuffle=False, num_batches=-1, save_output=False):
                 rightAnswerByQuestionType[type_str[j]] += 1
             confusionMatrix[answer[j], pred[j]] += 1
             
-        if save_output:
-            out_path = os.path.join(work_dir, 'output')
-            if not os.path.exists(out_path):
-                os.mkdir(out_path)
-            for j in range(batch_size):
-                viz_img = T.ToPILImage()(image_original[j].float().data.cpu())
-                viz_question = encoder_questions.decode(question[j].data.cpu().numpy())
-                viz_answer = encoder_answers.decode([answer[j]])
-                viz_pred = encoder_answers.decode([pred[j]])
+        # if save_output:
+        #     out_path = os.path.join(work_dir, 'output')
+        #     if not os.path.exists(out_path):
+        #         os.mkdir(out_path)
+        #     for j in range(batch_size):
+        #         viz_img = T.ToPILImage()(image_original[j].float().data.cpu())
+        #         viz_question = encoder_questions.decode(question[j].data.cpu().numpy())
+        #         viz_answer = encoder_answers.decode([answer[j]])
+        #         viz_pred = encoder_answers.decode([pred[j]])
             
-                imname = str(i * batch_size + j) + '_q_' + viz_question + '_gt_' + viz_answer + '_pred_' + viz_pred + '.png'
-                # replace special characters
-                imname = imname.replace('?', '')
-                plt.imsave(os.path.join(out_path, imname), viz_img)
+        #         imname = str(i * batch_size + j) + '_q_' + viz_question + '_gt_' + viz_answer + '_pred_' + viz_pred + '.png'
+        #         # replace special characters
+        #         imname = imname.replace('?', '')
+        #         plt.imsave(os.path.join(out_path, imname), viz_img)
     
     Accuracies = {'AA': 0}
     for type_str in countQuestionType.keys():
@@ -172,20 +147,13 @@ def run(experiment, dataset, shuffle=False, num_batches=-1, save_output=False):
     
     return Accuracies, confusionMatrix
 
-
-#expes = {'LRs': ['427f37d306ef4d03bb1406d5cd20336f', 'bd1387960b624257b9a50924d8134be6', '899e11235c624ec9bbb66e26da52d6fc'],
-#         'LR': ['427f37d306ef4d03bb1406d5cd20336f', 'bd1387960b624257b9a50924d8134be6', '899e11235c624ec9bbb66e26da52d6fc'],
-#         'HR': ['65f94a4f7ccd491da362f73e46795d26', '988853ae5d5e441695f98ee506021bdf', '3bfd251cafb74d379d02bf59d383381a'],
-#         'HRPhili': ['65f94a4f7ccd491da362f73e46795d26', '988853ae5d5e441695f98ee506021bdf', '3bfd251cafb74d379d02bf59d383381a'],
-#         'HRs': ['65f94a4f7ccd491da362f73e46795d26', '988853ae5d5e441695f98ee506021bdf', '3bfd251cafb74d379d02bf59d383381a'],
-#         'HRPhilis': ['65f94a4f7ccd491da362f73e46795d26', '988853ae5d5e441695f98ee506021bdf', '3bfd251cafb74d379d02bf59d383381a']}
 expes = {
-         'HR': ['RSVQA'],
-         'HRPhili': ['RSVQA'],
+         'HR': ['RSVQA_model_epoch_34', 'RSVQA_model_epoch_20'],
+         'HRPhili': ['RSVQA_model_epoch_34', 'RSVQA_model_epoch_20'],
 }
 #run('RSVQA', 'HR', num_batches=5, save_output=True)
 #run('65f94a4f7ccd491da362f73e46795d26', 'HRPhili', num_batches=5, save_output=True)
-#run('427f37d306ef4d03bb1406d5cd20336f', 'LR', num_batches=5, save_output=True)
+
 for dataset in expes.keys():
     acc = []
     mat = []
