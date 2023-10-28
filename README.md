@@ -24,7 +24,7 @@ If you receive a decode error when running the `train.py` script, try to change 
 
 ```bash
 # remove special characters
-sed -i 's/[^[:print:]]//g' dictionary.txt
+sed -i 's/[^ -~]/_/g' dictionary.txt
 ```
 
 Install pytorch with the following command (venv recommended):
@@ -43,16 +43,6 @@ pip3 install -r requirements.txt
 # RSVQA Code
 This readme presents the step required to generate the databases and reproduce the results presented in [1]. Please cite this article if you use this code.
 
-## Automatic generation of the DB:
-The automatic generation of the databases is handled by the scripts in the AutomaticDB folder, and can be launched with the process.py script.
-
-It works by intersecting geotagged images with elements from OSM.
-It has been checked to work on USGS' ortophotos or S2 tiles.
-You should set the access to the zip files at line 233 of process.py.
-The postgresql DB should be populated with OSM data covering the extent of the images. This OSM data can for instance be obtained here: http://download.geofabrik.de/
-
-In AutomaticDB/vqa_database.ini, you should configure the access to a postgresql database, as well as the access to the scentinel hub portal that can be obtained here: https://scihub.copernicus.eu/ (optional, you can also directly download the tiles)
-These fields are marked with "TO_REPLACE"
 
 ## Training the models
 The files regarding the model are put in the VQA_model folder.
