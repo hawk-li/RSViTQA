@@ -35,9 +35,9 @@ def vqa_collate_fn(batch):
     questions, answers, images, question_types = zip(*batch)
 
     # Convert tuples to appropriate tensor batches
-    questions_batch = torch.stack(questions)  # Assuming these are already tensors
-    answers_batch = torch.stack(answers)  # Assuming these are already tensors
-    images_batch = torch.stack(images)  # Assuming these are already tensors
+    questions_batch = torch.stack(questions)
+    answers_batch = torch.stack(answers)  
+    images_batch = torch.stack(images)  
     # For question_types, you can choose whether to convert to tensor or leave as a list
 
     return questions_batch, answers_batch, images_batch, question_types
@@ -76,12 +76,13 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
     AA = []
     start_time = datetime.datetime.now()
     for epoch in range(num_epochs):
+        epoch_start_time = datetime.datetime.now()
         model.train()  # Switch to train mode
         runningLoss = 0.0
         print(f'Starting epoch {epoch+1}/{num_epochs}')
 
         # Here we add tqdm to the training loader, providing a progress bar based on the number of batches
-        progress_bar = tqdm(enumerate(train_loader, 0), total=len(train_loader), desc=f"Epoch {epoch+1}", position=0, leave=True)
+        progress_bar = tqdm(enumerate(train_loader, 0), total=len(train_loader), desc=f"Epoch {epoch+1}", position=0, leave=False)
 
         for i, data in progress_bar:
             question, answer, image, _ = data
@@ -105,7 +106,6 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
 
             # Here's how you update the progress bar with additional info
             progress_bar.set_postfix({'training_loss': '{:.6f}'.format(current_loss / len(data))})
-        torch.cuda.empty_cache()
         
             
         trainLoss.append(runningLoss / len(train_dataset))
@@ -123,7 +123,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             rightAnswerByQuestionType = {'presence': 0, 'count': 0, 'comp': 0, 'area': 0}
 
             # Implementing tqdm for the validation loop, similar to the training loop
-            progress_bar = tqdm(enumerate(validate_loader, 0), total=len(validate_loader), desc="Validating", position=0, leave=True)
+            progress_bar = tqdm(enumerate(validate_loader, 0), total=len(validate_loader), desc="Validating", position=0, leave=False)
 
             for i, data in progress_bar:
                 question, answer, image, type_str = data
@@ -143,20 +143,19 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                     countQuestionType[type_str[j]] += 1
                     if answer[j] == pred[j]:
                         rightAnswerByQuestionType[type_str[j]] += 1
-                torch.cuda.empty_cache()
-                valLoss.append(runningLoss / len(validate_dataset))
-                print('epoch #%d val loss: %.3f' % (epoch, valLoss[epoch]))
-                print(datetime.datetime.now())  
-            
-                numQuestions = 0
-                numRightQuestions = 0
-                currentAA = 0
-                for type_str in countQuestionType.keys():
-                    if countQuestionType[type_str] > 0:
-                        accPerQuestionType[type_str].append(rightAnswerByQuestionType[type_str] * 1.0 / countQuestionType[type_str])
-                    numQuestions += countQuestionType[type_str]
-                    numRightQuestions += rightAnswerByQuestionType[type_str]
-                    currentAA += accPerQuestionType[type_str][epoch]
+            valLoss.append(runningLoss / len(validate_dataset))
+            print('epoch #%d val loss: %.3f' % (epoch, valLoss[epoch]))
+            print(datetime.datetime.now())  
+        
+            numQuestions = 0
+            numRightQuestions = 0
+            currentAA = 0
+            for type_str in countQuestionType.keys():
+                if countQuestionType[type_str] > 0:
+                    accPerQuestionType[type_str].append(rightAnswerByQuestionType[type_str] * 1.0 / countQuestionType[type_str])
+                numQuestions += countQuestionType[type_str]
+                numRightQuestions += rightAnswerByQuestionType[type_str]
+                currentAA += accPerQuestionType[type_str][epoch]
                 
         OA.append(numRightQuestions *1.0 / numQuestions)
         AA.append(currentAA * 1.0 / 4)
@@ -213,8 +212,8 @@ if __name__ == '__main__':
     questions_val_path = questions_path + '/val'
     experiment_name = "RSVQA_Res_RNN_512_600_35_0.00001_HR_2023-28-10"
 
-    batch_size = 150
-    num_epochs = 10
+    batch_size = 200
+    num_epochs = 35
     patch_size = 512   
     num_workers = 0
 
@@ -223,6 +222,6 @@ if __name__ == '__main__':
     
     
     RSVQA = model.VQAModel(input_size = patch_size).cuda()
-    RSVQA = train(RSVQA, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, modeltype, num_workers)
+    RSVQA = train(RSVQA, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, experiment_name, num_workers)
     
     

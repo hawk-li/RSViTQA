@@ -8,4 +8,5 @@
 /output/**
 accuracies_**
 confusion_matrix_**
+outputs/**
 ```
