@@ -9,4 +9,5 @@
 accuracies_**
 confusion_matrix_**
 outputs/**
+wandb/**
 ```

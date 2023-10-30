@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 matplotlib.use('Agg')
 
-from models import model
+from models import model_vit as model
 import VQADataset
 import VocabEncoder
 import torchvision.transforms as T
@@ -44,7 +44,7 @@ def vqa_collate_fn(batch):
 
     return questions_batch, answers_batch, images_batch, question_types
 
-def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, experiment_name, num_workers=4):
+def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, experiment_name, wandb_args, num_workers=4):
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
     validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
     
@@ -68,6 +68,14 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
         "epoch_data": [],
         "final_results": {},
     }
+    wandb.init(
+        project="rsvitqa", 
+        name=experiment_name,
+        config=wandb_args
+        )
+    log_interval = wandb.config.get("log_interval")
+    # magic
+    wandb.watch(model, log_freq=100)
         
     trainLoss = []
     valLoss = []
@@ -79,6 +87,8 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
     start_time = datetime.datetime.now()
     for epoch in range(num_epochs):
         epoch_start_time = datetime.datetime.now()
+        
+        
         model.train()  # Switch to train mode
         runningLoss = 0.0
         print(f'Starting epoch {epoch+1}/{num_epochs}')
@@ -101,7 +111,8 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
+            if i % log_interval == 0:
+                wandb.log({"loss": loss})
             # Update running loss and display it in the progress bar
             current_loss = loss.item() * question.size(0)
             runningLoss += current_loss
@@ -161,6 +172,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                 
         OA.append(numRightQuestions *1.0 / numQuestions)
         AA.append(currentAA * 1.0 / 4)
+        wandb.log({'epoch': epoch, "OA": OA[-1], "AA": AA[-1]})
         print('OA: %.3f' % (OA[epoch]))
         print('AA: %.3f' % (AA[epoch]))
         epoch_end_time = datetime.datetime.now()
@@ -203,27 +215,23 @@ if __name__ == '__main__':
     
     learning_rate = 0.00001
     ratio_images_to_use = 1
-    modeltype = 'Simple'
+    modeltype = 'RNN_ViT-CLS'
     Dataset = 'HR'
 
     work_dir = os.getcwd()
     data_path = work_dir + '/data'
-    images_path = data_path + '/image_representations'
+    images_path = data_path + '/image_representations_vit'
     questions_path = data_path + '/text_representations'
     questions_train_path = questions_path + '/train'
     questions_val_path = questions_path + '/val'
-    experiment_name = "RSVQA_Res_RNN_512_600_35_0.00001_HR_2023-28-10"
+    experiment_name = "RSVQA_ViT-CLS_RNN_512_100_35_0.00001_HR_2023-30-10"
 
-    batch_size = 200
+    batch_size = 400
     num_epochs = 35
     patch_size = 512   
     num_workers = 0
 
-    wandb.init(
-        project="rsvitqa", 
-        name=experiment_name,
-        
-        config = {
+    wandb_args = {
             "learning_rate": learning_rate,
             "ratio_images_to_use": ratio_images_to_use,
             "modeltype": modeltype,
@@ -231,13 +239,15 @@ if __name__ == '__main__':
             "batch_size": batch_size,
             "num_epochs": num_epochs,
             "patch_size": patch_size,
-            "num_workers": num_workers
-        })
+            "num_workers": num_workers,
+            "log_interval": 100,
+            "experiment_name": experiment_name
+        }
 
     train_dataset = VQADataset.VQADataset(questions_train_path, images_path)
     validate_dataset = VQADataset.VQADataset(questions_val_path, images_path) 
     
     RSVQA = model.VQAModel(input_size = patch_size).cuda()
-    RSVQA = train(RSVQA, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, experiment_name, num_workers)
+    RSVQA = train(RSVQA, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, experiment_name, wandb_args, num_workers)
     
     
