@@ -7,8 +7,8 @@
 # Calcul des statistiques sur un jeu de test
 
 import VocabEncoder
-import VQALoader
-from models import model
+import VQADataset
+from models import model_vit as model
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
@@ -19,6 +19,7 @@ from skimage import io
 import numpy as np
 import pickle
 import os
+from tqdm import tqdm
 
 def do_confusion_matrix(all_mat, old_vocab, new_vocab, dataset):
     print(new_vocab)
@@ -63,26 +64,29 @@ def get_vocab(dataset):
         
     return encoder_answers.getVocab()
 
-def run(experiment, dataset, shuffle=False, num_batches=-1, save_output=False):
-    print ('---' + experiment + '---')
-    batch_size = 100
+def load_model(experiment, epoch, patch_size=512):
+    weight_file = experiment + '_' + str(epoch) + '.pth'
     work_dir = os.getcwd()
-    data_path = work_dir + '/data'
-
-    images_path = os.path.join(data_path, 'image_representations')
-    text_path = os.path.join(data_path, 'text_representations/test')
-    patch_size = 512
-
-    weight_file = experiment + '.pth'
+    path = os.path.join(work_dir, 'outputs', weight_file)
     network = model.VQAModel(input_size = patch_size).cuda()
     state = network.state_dict()
-    state.update(torch.load(weight_file))
+    state.update(torch.load(path))
     network.load_state_dict(state)
     network.eval().cuda()
-    
-    test_dataset = VQALoader.VQADataset(text_path, images_path)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+    return network
 
+def load_dataset(text_path, images_path, batch_size=100, num_workers=0):
+    test_dataset = VQADataset.VQADataset(text_path, images_path)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+
+    return test_loader
+
+def run(network, test_loader, experiment, dataset, shuffle=False, num_batches=-1, save_output=False):
+    
+    batch_size = 100
+    patch_size = 512
+    
+    print ('---' + experiment + '---')
     if dataset == 'LR':
         countQuestionType = {'rural_urban': 0, 'presence': 0, 'count': 0, 'comp': 0}
         rightAnswerByQuestionType = {'rural_urban': 0, 'presence': 0, 'count': 0, 'comp': 0}
@@ -91,13 +95,11 @@ def run(experiment, dataset, shuffle=False, num_batches=-1, save_output=False):
         rightAnswerByQuestionType = {'area': 0, 'presence': 0, 'count': 0, 'comp': 0}
     encoder_answers = get_vocab(dataset)
     confusionMatrix = np.zeros((len(encoder_answers), len(encoder_answers)))
-    
-    for i, data in enumerate(test_loader, 0):
+    progress_bar = tqdm(enumerate(test_loader, 0), total=len(test_loader))
+    for i, data in progress_bar:
         if num_batches == 0:
             break
         num_batches -= 1
-        if i % 100 == 99:
-            print(float(i) / len(test_loader))
         question, answer, image, type_str = data
         answer = answer.squeeze(1).to("cuda")
         question = question.to("cuda")
@@ -148,12 +150,17 @@ def run(experiment, dataset, shuffle=False, num_batches=-1, save_output=False):
     return Accuracies, confusionMatrix
 
 expes = {
-         'HR': ['RSVQA_model_epoch_34', 'RSVQA_model_epoch_20'],
-         'HRPhili': ['RSVQA_model_epoch_34', 'RSVQA_model_epoch_20'],
+         'HR': ['RSVQA_ViT-CLS_RNN_512_100_35_0.00001_HR_2023-30-10/RSVQA_model_epoch'],
+         'HRPhili': ['RSVQA_ViT-CLS_RNN_512_100_35_0.00001_HR_2023-30-10/RSVQA_model_epoch'],
 }
 #run('RSVQA', 'HR', num_batches=5, save_output=True)
 #run('65f94a4f7ccd491da362f73e46795d26', 'HRPhili', num_batches=5, save_output=True)
+work_dir = os.getcwd()
+data_path = work_dir + '/data'
 
+images_path = os.path.join(data_path, 'image_representations_vit')
+text_path = os.path.join(data_path, 'text_representations/test')
+test_loader = load_dataset(text_path, images_path, batch_size=100, num_workers=0)
 for dataset in expes.keys():
     acc = []
     mat = []
@@ -162,9 +169,10 @@ for dataset in expes.keys():
             if dataset[-1] == 's':
                 tmp_acc, tmp_mat = run(experiment_name, dataset[:-1], shuffle=True)
             else:
-                tmp_acc, tmp_mat = run(experiment_name, dataset)
-            np.save('accuracies_' + dataset + '_' + experiment_name, tmp_acc)
-            np.save('confusion_matrix_' + dataset + '_' + experiment_name, tmp_mat)
+                model = load_model(experiment_name, 34)
+                tmp_acc, tmp_mat = run(model, test_loader, experiment_name, dataset)
+            # np.save('accuracies_' + dataset + '_' + experiment_name, tmp_acc)
+            # np.save('confusion_matrix_' + dataset + '_' + experiment_name, tmp_mat)
         else:
             tmp_acc = np.load('accuracies_' + dataset + '_' + experiment_name + '.npy', allow_pickle=True)[()]
             tmp_mat = np.load('confusion_matrix_' + dataset + '_' + experiment_name + '.npy', allow_pickle=True)[()]
