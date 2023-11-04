@@ -4,8 +4,6 @@
 @author: sylvain
 """
 
-# Script principal d'apprentissage
-
 import json
 from pathlib import Path
 import matplotlib
@@ -13,24 +11,18 @@ from tqdm import tqdm
 
 matplotlib.use('Agg')
 
-from models import model_vit as model
+
 import VQADataset
-import VocabEncoder
 import torchvision.transforms as T
 import torch
-from torch.autograd import Variable
-
 import numpy as np
-import matplotlib.pyplot as plt
-import torch.utils.data
 
-import pickle
+import torch.utils.data
 import os
 import datetime
-from shutil import copyfile
 
 import wandb
-
+from models import model_vit as model
 
 def vqa_collate_fn(batch):
     # Separate the list of tuples into individual lists
@@ -65,8 +57,8 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             "modeltype": modeltype,
             "experiment_name": experiment_name
         },
-        "epoch_data": [],
         "final_results": {},
+        "epoch_data": [],  
     }
     wandb.init(
         project="rsvitqa", 
@@ -75,7 +67,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
         )
     log_interval = wandb.config.get("log_interval")
     # magic
-    wandb.watch(model, log_freq=100)
+    wandb.watch(model, log_freq=log_interval)
         
     trainLoss = []
     valLoss = []
@@ -88,12 +80,12 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
     for epoch in range(num_epochs):
         epoch_start_time = datetime.datetime.now()
         
-        
+        model = model.to("cuda")
         model.train()  # Switch to train mode
         runningLoss = 0.0
         print(f'Starting epoch {epoch+1}/{num_epochs}')
 
-        # Here we add tqdm to the training loader, providing a progress bar based on the number of batches
+        # add tqdm to the training loader, providing a progress bar based on the number of batches
         progress_bar = tqdm(enumerate(train_loader, 0), total=len(train_loader), desc=f"Epoch {epoch+1}", position=0, leave=False)
 
         for i, data in progress_bar:
@@ -123,7 +115,6 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             
         trainLoss.append(runningLoss / len(train_dataset))
         print('epoch #%d loss: %.3f' % (epoch, trainLoss[epoch]))
-        # print current time
         model_save_path = output_dir / f"RSVQA_model_epoch_{epoch}.pth"
         torch.save(model.state_dict(), model_save_path)
 
@@ -158,6 +149,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                         rightAnswerByQuestionType[type_str[j]] += 1
             valLoss.append(runningLoss / len(validate_dataset))
             print('epoch #%d val loss: %.3f' % (epoch, valLoss[epoch]))
+            wandb.log({"val_loss": valLoss[-1]})
             print(datetime.datetime.now())  
         
             numQuestions = 0
@@ -165,14 +157,17 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             currentAA = 0
             for type_str in countQuestionType.keys():
                 if countQuestionType[type_str] > 0:
-                    accPerQuestionType[type_str].append(rightAnswerByQuestionType[type_str] * 1.0 / countQuestionType[type_str])
+                    accPerQuestiontype_tmp = rightAnswerByQuestionType[type_str] * 1.0 / countQuestionType[type_str]
+                    accPerQuestionType[type_str].append(accPerQuestiontype_tmp)
+                    wandb.log({type_str: accPerQuestiontype_tmp})
+                    print(f"{type_str}: {accPerQuestiontype_tmp}")
                 numQuestions += countQuestionType[type_str]
                 numRightQuestions += rightAnswerByQuestionType[type_str]
                 currentAA += accPerQuestionType[type_str][epoch]
                 
         OA.append(numRightQuestions *1.0 / numQuestions)
         AA.append(currentAA * 1.0 / 4)
-        wandb.log({'epoch': epoch, "OA": OA[-1], "AA": AA[-1]})
+        wandb.log({"OA": OA[-1], "AA": AA[-1]})
         print('OA: %.3f' % (OA[epoch]))
         print('AA: %.3f' % (AA[epoch]))
         epoch_end_time = datetime.datetime.now()
@@ -200,7 +195,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
         "AA-epochs": sum(AA) / len(AA),
         "start_time": start_time.strftime("%Y-%m-%d_%H:%M:%S"),
         "end_time": end_time.strftime("%Y-%m-%d_%H:%M:%S"),
-        "total_time_in_hours": (end_time - start_time).total_seconds() / 3600,
+        "total_time_in_hours": (end_time - start_time).total_seconds() / 3600
     }
 
     # Save the final experiment log
@@ -213,23 +208,23 @@ if __name__ == '__main__':
     torch.multiprocessing.set_start_method('spawn')
     disable_log = False
     
-    learning_rate = 0.00001
+    learning_rate = 0.0001
     ratio_images_to_use = 1
-    modeltype = 'RNN_ViT-CLS'
+    modeltype = 'RNN_ViT-H'
     Dataset = 'HR'
 
-    work_dir = os.getcwd()
-    data_path = work_dir + '/data'
-    images_path = data_path + '/image_representations_vit'
-    questions_path = data_path + '/text_representations'
-    questions_train_path = questions_path + '/train'
-    questions_val_path = questions_path + '/val'
-    experiment_name = "RSVQA_ViT-CLS_RNN_512_100_35_0.00001_HR_2023-30-10"
-
-    batch_size = 400
+    batch_size = 700
     num_epochs = 35
     patch_size = 512   
     num_workers = 0
+
+    work_dir = os.getcwd()
+    data_path = work_dir + '/data'
+    images_path = data_path + '/image_representations_vit_h'
+    questions_path = data_path + '/text_representations'
+    questions_train_path = questions_path + '/train'
+    questions_val_path = questions_path + '/val'
+    experiment_name = f"{modeltype}_lr_{learning_rate}_batch_size_{batch_size}_run_{datetime.datetime.now().strftime('%m-%d_%H_%M')}"
 
     wandb_args = {
             "learning_rate": learning_rate,
@@ -247,7 +242,7 @@ if __name__ == '__main__':
     train_dataset = VQADataset.VQADataset(questions_train_path, images_path)
     validate_dataset = VQADataset.VQADataset(questions_val_path, images_path) 
     
-    RSVQA = model.VQAModel(input_size = patch_size).cuda()
-    RSVQA = train(RSVQA, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, experiment_name, wandb_args, num_workers)
+    RSVQA = model.VQAModel(input_size = patch_size)
+    train(RSVQA, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, experiment_name, wandb_args, num_workers)
     
     

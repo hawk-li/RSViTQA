@@ -81,7 +81,7 @@ def load_dataset(text_path, images_path, batch_size=100, num_workers=0):
 
     return test_loader
 
-def run(network, test_loader, experiment, dataset, shuffle=False, num_batches=-1, save_output=False):
+def run(network, test_loader, experiment, dataset, num_batches=-1, save_output=False):
     
     batch_size = 100
     patch_size = 512
@@ -104,11 +104,7 @@ def run(network, test_loader, experiment, dataset, shuffle=False, num_batches=-1
         answer = answer.squeeze(1).to("cuda")
         question = question.to("cuda")
         image = image.to("cuda")
-        # if shuffle:
-        #     order = np.array(range(image.shape[0]))
-        #     np.random.shuffle(order)
-        #     image[np.array(range(image.shape[0]))] = image[order]
-        # image = Variable(image.float()).cuda()
+
         pred = network(image,question)
         
         answer = answer.cpu().numpy()
@@ -150,15 +146,13 @@ def run(network, test_loader, experiment, dataset, shuffle=False, num_batches=-1
     return Accuracies, confusionMatrix
 
 expes = {
-         'HR': ['RSVQA_ViT-CLS_RNN_512_100_35_0.00001_HR_2023-30-10/RSVQA_model_epoch'],
-         'HRPhili': ['RSVQA_ViT-CLS_RNN_512_100_35_0.00001_HR_2023-30-10/RSVQA_model_epoch'],
+         'HR': ['RNN_ViT-L_lr_1e-05_batch_size_70_run_10-31_13_51/RSVQA_model_epoch'],
+         #'HRPhili': ['RSVQA_ViT-CLS_RNN_512_100_35_0.00001_HR_2023-30-10/RSVQA_model_epoch'],
 }
-#run('RSVQA', 'HR', num_batches=5, save_output=True)
-#run('65f94a4f7ccd491da362f73e46795d26', 'HRPhili', num_batches=5, save_output=True)
 work_dir = os.getcwd()
 data_path = work_dir + '/data'
 
-images_path = os.path.join(data_path, 'image_representations_vit')
+images_path = os.path.join(data_path, 'image_representations_vit_l')
 text_path = os.path.join(data_path, 'text_representations/test')
 test_loader = load_dataset(text_path, images_path, batch_size=100, num_workers=0)
 for dataset in expes.keys():
