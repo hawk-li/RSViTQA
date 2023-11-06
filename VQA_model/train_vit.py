@@ -98,8 +98,25 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
 
             answer = answer.squeeze(1)
             pred = model(image, question, question_type)
+            question_type = torch.tensor(question_type).to(pred.device)
+            samples_per_task = [(question_type == qt).sum().item() for qt in range(4)]
 
-            loss = criterion(pred, answer)
+            distribution = [float(len(question_type)) / float(samples_per_task[i]) for i in range(4)]
+            weights = [1.0 / dist for dist in distribution]
+
+            question_type_to_num_answers = {
+                0: [0, 1],
+                1: [0, 1],
+                2: list(range(2, 6)),
+                3: list(range(6, 95))
+            }
+            loss_total = 0
+            for qt in range(len(question_type_to_num_answers)):
+                mask = question_type == qt
+                loss_qt = criterion(pred[mask], answer[mask]) 
+                loss_total += loss_qt * weights[qt]
+
+            loss = loss_total #criterion(pred, answer)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -212,12 +229,12 @@ if __name__ == '__main__':
     torch.multiprocessing.set_start_method('spawn')
     disable_log = False
     
-    learning_rate = 0.00001
+    learning_rate = 0.0001
     ratio_images_to_use = 1
     modeltype = 'RNN_ViT-B-Multi'
     Dataset = 'HR'
 
-    batch_size = 70
+    batch_size = 700
     num_epochs = 35
     patch_size = 512   
     num_workers = 0

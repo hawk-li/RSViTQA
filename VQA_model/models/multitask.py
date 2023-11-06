@@ -80,8 +80,9 @@ class MultiTaskVQAModel(nn.Module):
             mask = question_type == qt
             x_masked = x[mask]
             classifier_output = self.classifiers[qt](x_masked)
+            #print(f"qt: {qt}, classifier_output: {classifier_output.shape}")
             output[mask] = self.get_final_prediction(classifier_output, qt, self.total_num_classes)
-
+        #print(f"output: {output.shape}")
         return output
     
     def get_final_prediction(self, pred, question_type, num_classes):
