@@ -12,7 +12,7 @@ from tqdm import tqdm
 matplotlib.use('Agg')
 
 
-import VQADataset
+import VQADataset_Multitask as VQADataset
 import torchvision.transforms as T
 import torch
 import numpy as np
@@ -23,6 +23,7 @@ import datetime
 
 import wandb
 from models import model_vit as model
+from models import multitask as multitask
 
 def vqa_collate_fn(batch):
     # Separate the list of tuples into individual lists
@@ -89,15 +90,14 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
         progress_bar = tqdm(enumerate(train_loader, 0), total=len(train_loader), desc=f"Epoch {epoch+1}", position=0, leave=False)
 
         for i, data in progress_bar:
-            question, answer, image, _ = data
+            question, answer, image, question_type = data
 
             question = question.to("cuda")
             answer = answer.to("cuda")
             image = image.to("cuda")
 
             answer = answer.squeeze(1)
-
-            pred = model(image, question)
+            pred = model(image, question, question_type)
 
             loss = criterion(pred, answer)
             optimizer.zero_grad()
@@ -105,11 +105,10 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             optimizer.step()
             if i % log_interval == 0:
                 wandb.log({"loss": loss})
+
             # Update running loss and display it in the progress bar
             current_loss = loss.item() * question.size(0)
             runningLoss += current_loss
-
-            # Here's how you update the progress bar with additional info
             progress_bar.set_postfix({'training_loss': '{:.6f}'.format(current_loss / len(data))})
         
             
@@ -130,7 +129,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             progress_bar = tqdm(enumerate(validate_loader, 0), total=len(validate_loader), desc="Validating", position=0, leave=False)
 
             for i, data in progress_bar:
-                question, answer, image, type_str = data
+                question, answer, image, question_type = data
 
                 question = question.to("cuda")
                 answer = answer.to("cuda")
@@ -138,11 +137,16 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
 
                 answer = answer.squeeze(1)  # Removing an extraneous dimension from the answers
 
-                pred = model(image, question)
+                pred = model(image, question, question_type)
                 loss = criterion(pred, answer)
                 runningLoss += loss.item() * question.size(0)  # Accumulating the loss
 
+                idx_to_question_type = {0: 'presence', 1: 'comp', 2: 'area', 3: 'count'}
+
+                type_str = [idx_to_question_type[idx] for idx in question_type]
+
                 pred = np.argmax(pred.cpu().numpy(), axis=1)  # Getting the index of the max log-probability
+
                 for j in range(answer.shape[0]):
                     countQuestionType[type_str[j]] += 1
                     if answer[j] == pred[j]:
@@ -155,15 +159,15 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             numQuestions = 0
             numRightQuestions = 0
             currentAA = 0
-            for type_str in countQuestionType.keys():
-                if countQuestionType[type_str] > 0:
-                    accPerQuestiontype_tmp = rightAnswerByQuestionType[type_str] * 1.0 / countQuestionType[type_str]
-                    accPerQuestionType[type_str].append(accPerQuestiontype_tmp)
-                    wandb.log({type_str: accPerQuestiontype_tmp})
-                    print(f"{type_str}: {accPerQuestiontype_tmp}")
-                numQuestions += countQuestionType[type_str]
-                numRightQuestions += rightAnswerByQuestionType[type_str]
-                currentAA += accPerQuestionType[type_str][epoch]
+            for question_type in countQuestionType.keys():
+                if countQuestionType[question_type] > 0:
+                    accPerQuestiontype_tmp = rightAnswerByQuestionType[question_type] * 1.0 / countQuestionType[question_type]
+                    accPerQuestionType[question_type].append(accPerQuestiontype_tmp)
+                    wandb.log({question_type: accPerQuestiontype_tmp})
+                    print(f"{question_type}: {accPerQuestiontype_tmp}")
+                numQuestions += countQuestionType[question_type]
+                numRightQuestions += rightAnswerByQuestionType[question_type]
+                currentAA += accPerQuestionType[question_type][epoch]
                 
         OA.append(numRightQuestions *1.0 / numQuestions)
         AA.append(currentAA * 1.0 / 4)
@@ -208,19 +212,19 @@ if __name__ == '__main__':
     torch.multiprocessing.set_start_method('spawn')
     disable_log = False
     
-    learning_rate = 0.0001
+    learning_rate = 0.00001
     ratio_images_to_use = 1
-    modeltype = 'RNN_ViT-H'
+    modeltype = 'RNN_ViT-B-Multi'
     Dataset = 'HR'
 
-    batch_size = 700
+    batch_size = 70
     num_epochs = 35
     patch_size = 512   
     num_workers = 0
 
     work_dir = os.getcwd()
     data_path = work_dir + '/data'
-    images_path = data_path + '/image_representations_vit_h'
+    images_path = data_path + '/image_representations_vit'
     questions_path = data_path + '/text_representations'
     questions_train_path = questions_path + '/train'
     questions_val_path = questions_path + '/val'
@@ -239,10 +243,10 @@ if __name__ == '__main__':
             "experiment_name": experiment_name
         }
 
-    train_dataset = VQADataset.VQADataset(questions_train_path, images_path)
-    validate_dataset = VQADataset.VQADataset(questions_val_path, images_path) 
+    train_dataset = VQADataset.VQADataset_Multitask(questions_train_path, images_path)
+    validate_dataset = VQADataset.VQADataset_Multitask(questions_val_path, images_path) 
     
-    RSVQA = model.VQAModel(input_size = patch_size)
+    RSVQA = multitask.MultiTaskVQAModel()
     train(RSVQA, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, experiment_name, wandb_args, num_workers)
     
     

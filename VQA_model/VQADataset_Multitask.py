@@ -2,6 +2,7 @@ from glob import glob
 import os
 import torch
 from torch.utils.data import Dataset
+from tqdm import tqdm
 
 question_type_to_idx = {
     "count": 0,
@@ -10,7 +11,7 @@ question_type_to_idx = {
     "comp": 3,
 }
 
-class VQADataset(Dataset):
+class VQADataset_Multitask(Dataset):
     def __init__(self, textual_path, visual_path):
         self.textual_path = textual_path
         self.visual_path = visual_path
@@ -20,11 +21,10 @@ class VQADataset(Dataset):
 
         # Store separate items for all questions and answers
         self.items = []
-        print("Loading data...")
-        for file_path in self.files:
+        progress_bar = tqdm(self.files, desc="Loading files", total=len(self.files))
+        for file_path in progress_bar:
             # Load the Q/A pairs from the file
             qa_pairs = torch.load(file_path)
-            
             for qa_pair in qa_pairs:
                 self.items.append(qa_pair)
 
