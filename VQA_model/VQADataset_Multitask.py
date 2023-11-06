@@ -5,10 +5,10 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 
 question_type_to_idx = {
-    "count": 0,
-    "presence": 1,
+    "count": 3,
+    "presence": 0,
     "area": 2,
-    "comp": 3,
+    "comp": 1,
 }
 
 class VQADataset_Multitask(Dataset):
@@ -43,4 +43,4 @@ class VQADataset_Multitask(Dataset):
         # Load the image associated with this Q/A pair
         image = torch.load(os.path.join(self.visual_path, f"{image_id}.pt"))
 
-        return question, answer, image, question_type_idx
+        return question, answer, image, question_type_idx, question_type_str
