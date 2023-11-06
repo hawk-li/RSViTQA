@@ -73,7 +73,6 @@ class MultiTaskVQAModel(nn.Module):
 
         # Choose the right classifier based on question type
         # Handle batch of question types
-        question_type = torch.tensor(question_type).to(x.device)
         output = torch.zeros((question_type.shape[0], self.total_num_classes), device=question_type.device)
 
         for qt in self.question_type_to_num_answers.keys():
