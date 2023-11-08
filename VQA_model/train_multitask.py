@@ -43,7 +43,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
     validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
     
     
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.Adam(model.shared_parameters(), lr=learning_rate)
     optimizer_heads = [torch.optim.Adam(classifier.parameters(), lr=learning_rate) for classifier in model.classifiers]
     criterion = torch.nn.CrossEntropyLoss()
 
@@ -108,21 +108,22 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             samples_per_task = [(question_type == qt).sum().item() for qt in range(4)]
             #print(f"Samples per task: {samples_per_task}")
 
-            # Calculate initial weights inversely proportional to class frequencies
+            #Calculate initial weights inversely proportional to class frequencies
             weights = [1.0 / (count if count > 0 else 1) for count in samples_per_task]
 
-            # get factor to increase the weight of the harder classes from the config
-            focus_increase_factor = wandb.config.get("focus_increase_factor")
-            focus_increase_question_types = wandb.config.get("focus_increase_question_types")
+            #get factor to increase the weight of the harder classes from the config
+            focus_increase_factors = wandb.config.get("focus_increase_factors")
 
-            for qt in focus_increase_question_types:
-                weights[qt] *= focus_increase_factor
+            for qt in focus_increase_factors.keys(): 
+                weights[int(qt)] *= focus_increase_factors[qt]
 
-            # Normalize the weights
+            #Normalize the weights
             weight_sum = sum(weights)
-            normalized_weights = [weight / weight_sum * 3 for weight in weights]  # Multiply by 3 because there are 3 tasks
-
+            normalized_weights = [weight / weight_sum for weight in weights] 
             #print(f"Normalized Weights: {normalized_weights}")
+            if i % log_interval == 0:
+                wandb.log({["weight_0", "weight_1", "weight_2", "weight_3"][qt]: normalized_weights[qt] for qt in range(4)})
+                wandb.log({["samples_0", "samples_1", "samples_2", "samples_3"][qt]: samples_per_task[qt]/sum(samples_per_task) for qt in range(4)})
 
             loss_total = 0
             task_specific_losses = []
@@ -135,7 +136,6 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                 pred_qt = pred[mask]
                 answer_qt = answer[mask]
                 
-                # Use Cross-Entropy loss for other question types
                 loss_qt = criterion(pred_qt, answer_qt)
                 
                 task_specific_losses.append(loss_qt * normalized_weights[qt])
@@ -153,13 +153,14 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             # Backpropagate the total loss
             loss_total.backward()
 
-            # Now, update all parameters
-            optimizer.step()
+            
             for optimizer_head in optimizer_heads:
                 optimizer_head.step()
-
+            # Now, update all parameters
+            optimizer.step()
             if i % log_interval == 0:
-                wandb.log({"loss": loss})
+                wandb.log({"epoch": epoch, "loss": loss})
+                wandb.log({"loss_total": loss_total})
 
             # Update running loss and display it in the progress bar
             current_loss = loss.item() * question.size(0)
@@ -213,7 +214,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                 if countQuestionType[question_type] > 0:
                     accPerQuestiontype_tmp = rightAnswerByQuestionType[question_type] * 1.0 / countQuestionType[question_type]
                     accPerQuestionType[question_type].append(accPerQuestiontype_tmp)
-                    wandb.log({question_type: accPerQuestiontype_tmp})
+                    wandb.log({"epoch": epoch, question_type: accPerQuestiontype_tmp})
                     print(f"{question_type}: {accPerQuestiontype_tmp}")
                 numQuestions += countQuestionType[question_type]
                 numRightQuestions += rightAnswerByQuestionType[question_type]
@@ -221,7 +222,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                 
         OA.append(numRightQuestions *1.0 / numQuestions)
         AA.append(currentAA * 1.0 / 4)
-        wandb.log({"OA": OA[-1], "AA": AA[-1]})
+        wandb.log({"epoch": epoch, "OA": OA[-1], "AA": AA[-1]})
         print('OA: %.3f' % (OA[epoch]))
         print('AA: %.3f' % (AA[epoch]))
         epoch_end_time = datetime.datetime.now()
@@ -263,9 +264,9 @@ if __name__ == '__main__':
     torch.autograd.set_detect_anomaly(True)
     disable_log = False
     
-    learning_rate = 0.0001
+    learning_rate = 0.00001
     ratio_images_to_use = 1
-    modeltype = 'RNN_ViT-B-Multi'
+    modeltype = 'RNN_ViT-B-Multi-weight-norm'
     Dataset = 'HR'
 
     batch_size = 700
@@ -292,8 +293,7 @@ if __name__ == '__main__':
             "num_workers": num_workers,
             "log_interval": 100,
             "experiment_name": experiment_name,
-            "focus_increase_factor": 2,
-            "focus_increase_question_types": [3]
+            "focus_increase_factors":  {3: 2.0} # Increase the weight of the count question type by 2x
         }
 
     train_dataset = VQADataset.VQADataset_Multitask(questions_train_path, images_path)
