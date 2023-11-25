@@ -68,7 +68,7 @@ def load_model(experiment, epoch, patch_size=512):
     weight_file = experiment + '_' + str(epoch) + '.pth'
     work_dir = os.getcwd()
     path = os.path.join(work_dir, 'outputs', weight_file)
-    network = model.VQAModel(input_size = patch_size).cuda()
+    network = model.VQAModel().cuda()#input_size = patch_size).cuda()
     state = network.state_dict()
     state.update(torch.load(path))
     network.load_state_dict(state)
@@ -146,13 +146,13 @@ def run(network, test_loader, experiment, dataset, num_batches=-1, save_output=F
     return Accuracies, confusionMatrix
 
 expes = {
-         'HR': ['RNN_ViT-L_lr_1e-05_batch_size_70_run_10-31_13_51/RSVQA_model_epoch'],
+         'HR': ['RNN_ViT_MUTAN_lr_1e-05_batch_size_700_run_11-23_12_40/RSVQA_model_epoch'],
          #'HRPhili': ['RSVQA_ViT-CLS_RNN_512_100_35_0.00001_HR_2023-30-10/RSVQA_model_epoch'],
 }
 work_dir = os.getcwd()
 data_path = work_dir + '/data'
 
-images_path = os.path.join(data_path, 'image_representations_vit_l')
+images_path = os.path.join(data_path, 'image_representations_vit')
 text_path = os.path.join(data_path, 'text_representations/test')
 test_loader = load_dataset(text_path, images_path, batch_size=100, num_workers=0)
 for dataset in expes.keys():
