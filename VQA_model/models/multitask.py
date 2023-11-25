@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from models import attention
 
 VISUAL_OUT_VIT = 768
 QUESTION_OUT = 2400
@@ -47,6 +48,9 @@ class MultiTaskVQAModel(nn.Module):
         self.question_type_to_num_answers = question_type_to_num_answers
         self.total_num_classes = 95
 
+        # self.selfattention = attention.SelfAttention(FUSION_IN)
+        # self.crossattention = attention.CrossAttention(FUSION_IN)
+
         self.classifiers = nn.ModuleList([
             nn.Sequential(
                 nn.Linear(FUSION_IN, FUSION_HIDDEN),
@@ -54,6 +58,12 @@ class MultiTaskVQAModel(nn.Module):
                 nn.Linear(FUSION_HIDDEN, num_answers)
             ) for num_answers in question_type_to_num_answers.values()
         ])
+
+    def shared_parameters(self):
+        # Return all parameters that are not part of the classifier heads
+        for name, param in self.named_parameters():
+            if not any(name.startswith(f'classifiers.{i}') for i in range(len(self.classifiers))):
+                yield param
 
     def forward(self, input_v, input_q, question_type):
         x_v = self.linear_v(input_v)
@@ -63,12 +73,16 @@ class MultiTaskVQAModel(nn.Module):
         x_q = self.linear_q(x_q)
         x_q = torch.tanh(x_q)
         
-        x = x_v * x_q
-        x = torch.tanh(x)
+        # x_q, _ = self.selfattention(x_q)
+        # x_v, _ = self.crossattention(x_q, x_v)
+
+        x = torch.mul(x_v, x_q)
+        # x = torch.squeeze(x, 1)
+        # x = nn.Tanh()(x)
 
         # Initialize a tensor to hold the final predictions for the entire batch
-        batch_size = x.size(0)
-        final_output = torch.zeros(batch_size, self.total_num_classes, device=x.device)
+        batch_size = x_q.size(0)
+        final_output = torch.zeros(batch_size, self.total_num_classes, device=x_q.device)
 
         for qt, classifier in zip(self.question_type_to_num_answers.keys(), self.classifiers):
             mask = (question_type == qt)

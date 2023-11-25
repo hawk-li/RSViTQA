@@ -43,6 +43,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
     validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
     
+    model = model.to("cuda")
     
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)#, weight_decay=0.0001)
     criterion = torch.nn.CrossEntropyLoss()
@@ -110,11 +111,11 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             if i % log_interval == 0:
                 wandb.log({"epoch":  epoch, "loss": loss})
             # Update running loss and display it in the progress bar
-            current_loss = loss.item() * question.size(0)
+            current_loss = loss.item()
             runningLoss += current_loss
 
             # Here's how you update the progress bar with additional info
-            progress_bar.set_postfix({'training_loss': '{:.6f}'.format(current_loss / len(data))})
+            progress_bar.set_postfix({'training_loss': '{:.6f}'.format(current_loss)})
         
             
         trainLoss.append(runningLoss / len(train_dataset))
@@ -197,6 +198,14 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
         "average_val_loss": sum(valLoss) / len(valLoss),
         "OA-epochs": sum(OA) / len(OA),
         "AA-epochs": sum(AA) / len(AA),
+        "OA-max": {
+            "epoch": np.argmax(OA),
+            "value": np.max(OA)
+        },
+        "AA-max": {
+            "epoch": np.argmax(AA),
+            "value": np.max(AA)
+        },
         "start_time": start_time.strftime("%Y-%m-%d_%H:%M:%S"),
         "end_time": end_time.strftime("%Y-%m-%d_%H:%M:%S"),
         "total_time_in_hours": (end_time - start_time).total_seconds() / 3600
@@ -206,47 +215,71 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
     final_log_file = output_dir / "final_experiment_log.json"
     with open(final_log_file, 'w') as outfile:
         json.dump(experiment_log, outfile, indent=4)
+    wandb.finish()
 
 
 if __name__ == '__main__':
-    torch.multiprocessing.set_start_method('spawn')
     disable_log = False
     
-    learning_rate = 0.00001
-    ratio_images_to_use = 1
-    modeltype = "RNN_Res_MUTAN"
-    Dataset = 'HR'
+    train_configs = [
+            {
+            'batch_size': 70,
+            'num_epochs': 35,
+            'learning_rate': 0.00001
+            },
+            {
+            'batch_size': 700,
+            'num_epochs': 35,
+            'learning_rate': 0.00001
+            },
+            {
+            'batch_size': 700,
+            'num_epochs': 35,
+            'learning_rate': 0.0001
+            },
+            {
+            'batch_size': 1400,
+            'num_epochs': 35,
+            'learning_rate': 0.0001
+            }
+        ]
 
-    batch_size = 70
-    num_epochs = 35
+    
+    modeltype = 'RNN_Res'
+    Dataset = 'HR'
     patch_size = 512   
     num_workers = 0
 
-    work_dir = os.getcwd()
-    data_path = work_dir + '/data'
-    images_path = data_path + '/image_representations'
-    questions_path = data_path + '/text_representations'
-    questions_train_path = questions_path + '/train'
-    questions_val_path = questions_path + '/val'
-    experiment_name = f"{modeltype}_lr_{learning_rate}_batch_size_{batch_size}_run_{datetime.datetime.now().strftime('%m-%d_%H_%M')}"
 
-    wandb_args = {
-            "learning_rate": learning_rate,
-            "ratio_images_to_use": ratio_images_to_use,
-            "modeltype": modeltype,
-            "Dataset": Dataset,
-            "batch_size": batch_size,
-            "num_epochs": num_epochs,
-            "patch_size": patch_size,
-            "num_workers": num_workers,
-            "log_interval": 100,
-            "experiment_name": experiment_name
-        }
+    for config in train_configs:
+        batch_size = config['batch_size']
+        num_epochs = config['num_epochs']
+        learning_rate = config['learning_rate']
 
-    train_dataset = VQADataset.VQADataset(questions_train_path, images_path)
-    validate_dataset = VQADataset.VQADataset(questions_val_path, images_path) 
-    
-    RSVQA = model.VQAModel()
-    train(RSVQA, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, experiment_name, wandb_args, num_workers)
+        work_dir = os.getcwd()
+        data_path = work_dir + '/data'
+        images_path = data_path + '/image_representations'
+        questions_path = data_path + '/text_representations'
+        questions_train_path = questions_path + '/train'
+        questions_val_path = questions_path + '/val'
+        experiment_name = f"{modeltype}_lr_{learning_rate}_batch_size_{batch_size}_run_{datetime.datetime.now().strftime('%m-%d_%H_%M')}"
+
+        wandb_args = {
+                "learning_rate": learning_rate,
+                "modeltype": modeltype,
+                "Dataset": Dataset,
+                "batch_size": batch_size,
+                "num_epochs": num_epochs,
+                "patch_size": patch_size,
+                "num_workers": num_workers,
+                "log_interval": 100,
+                "experiment_name": experiment_name
+            }
+        
+        train_dataset = VQADataset.VQADataset(questions_train_path, images_path)
+        validate_dataset = VQADataset.VQADataset(questions_val_path, images_path) 
+        
+        RSVQA = model.VQAModel(input_size = patch_size)
+        train(RSVQA, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, experiment_name, wandb_args, num_workers)
     
     
