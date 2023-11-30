@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 
 class VQADataset(Dataset):
-    def __init__(self, textual_path, visual_path):
+    def __init__(self, textual_path, visual_path, load_images=False):
         self.textual_path = textual_path
         self.visual_path = visual_path
 
@@ -22,21 +22,23 @@ class VQADataset(Dataset):
             qa_pairs = torch.load(file_path)
             for qa_pair in qa_pairs:
                 self.items.append(qa_pair)
-
-        self.image_ids = []
-        progress_bar = tqdm(self.items, desc="Loading image IDs", total=len(self.items))
-        for item in progress_bar:
-            image_id = int(item["image_id"])
-            if image_id not in self.image_ids:
-                self.image_ids.append(image_id)
-        # sort image ids
-        self.image_ids.sort()
-        self.images = {}
-        progress_bar = tqdm(self.image_ids, desc="Loading images", total=len(self.image_ids))
-        for image_id in progress_bar:
-            # Load the image
-            image = torch.load(os.path.join(visual_path, f"{image_id}.pt"))
-            self.images[image_id] = image
+        if load_images:
+            self.image_ids = []
+            progress_bar = tqdm(self.items, desc="Loading image IDs", total=len(self.items))
+            for item in progress_bar:
+                image_id = int(item["image_id"])
+                if image_id not in self.image_ids:
+                    self.image_ids.append(image_id)
+            # sort image ids
+            self.image_ids.sort()
+            self.images = {}
+            progress_bar = tqdm(self.image_ids, desc="Loading images", total=len(self.image_ids))
+            for image_id in progress_bar:
+                # Load the image
+                image = torch.load(os.path.join(visual_path, f"{image_id}.pt"))
+                self.images[image_id] = image
+        else:
+            self.images = None
 
 
     def __len__(self):
@@ -51,6 +53,9 @@ class VQADataset(Dataset):
         image_id = int(item["image_id"])
 
         # Load the image associated with this Q/A pair
-        image = self.images[image_id]
+        if self.images is not None:
+            image = self.images[image_id]
+        else:
+            image = torch.load(os.path.join(self.visual_path, f"{image_id}.pt"))
 
         return question, answer, image, question_type

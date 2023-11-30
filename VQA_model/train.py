@@ -22,9 +22,10 @@ import os
 import datetime
 
 import wandb
-from models import model_vit as model
-from models import model_attention as model_attention
-from models import model as model_res
+from models import model_vit 
+from models import model_attention
+from models import model_vit_bert
+from models import model
 
 def vqa_collate_fn(batch):
     # Separate the list of tuples into individual lists
@@ -44,7 +45,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
     
     model = model.to("cuda")
     
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)#, weight_decay=0.0001)
     criterion = torch.nn.CrossEntropyLoss()
 
     # Create a directory for the experiment outputs
@@ -69,6 +70,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
         config=wandb_args
         )
     log_interval = wandb.config.get("log_interval")
+    model = model.to("cuda")
     # magic
     wandb.watch(model, log_freq=log_interval)
         
@@ -100,13 +102,14 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             answer = answer.squeeze(1)
 
             pred = model(image, question)
-
+            # pred_magnitude = torch.abs(pred)
+            # pred = pred_magnitude * torch.sign(pred)
             loss = criterion(pred, answer)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             if i % log_interval == 0:
-                wandb.log({"loss": loss})
+                wandb.log({"epoch":  epoch, "loss": loss})
             # Update running loss and display it in the progress bar
             current_loss = loss.item()
             runningLoss += current_loss
@@ -151,7 +154,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                         rightAnswerByQuestionType[type_str[j]] += 1
             valLoss.append(runningLoss / len(validate_dataset))
             print('epoch #%d val loss: %.3f' % (epoch, valLoss[epoch]))
-            wandb.log({"val_loss": valLoss[-1]})
+            wandb.log({"epoch": epoch, "val_loss": valLoss[-1]})
             print(datetime.datetime.now())  
         
             numQuestions = 0
@@ -169,7 +172,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                 
         OA.append(numRightQuestions *1.0 / numQuestions)
         AA.append(currentAA * 1.0 / 4)
-        wandb.log({"OA": OA[-1], "AA": AA[-1]})
+        wandb.log({"epoch": epoch, "OA": OA[-1], "AA": AA[-1]})
         print('OA: %.3f' % (OA[epoch]))
         print('AA: %.3f' % (AA[epoch]))
         epoch_end_time = datetime.datetime.now()
@@ -276,7 +279,7 @@ if __name__ == '__main__':
         train_dataset = VQADataset.VQADataset(questions_train_path, images_path)
         validate_dataset = VQADataset.VQADataset(questions_val_path, images_path) 
         
-        RSVQA = model_res.VQAModel(input_size = patch_size)
+        RSVQA = model.VQAModel(input_size = patch_size)
         train(RSVQA, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, experiment_name, wandb_args, num_workers)
     
     
