@@ -8,7 +8,9 @@ FUSION_IN = 1200
 FUSION_HIDDEN = 256
 DROPOUT_V = 0.5
 DROPOUT_Q = 0.5
-DROPOUT_F = 0.25
+DROPOUT_F = 0.5
+
+from block import fusions
 
 # used in dataset, only for reference
 # question_type_to_idx = {
@@ -24,6 +26,24 @@ DROPOUT_F = 0.25
 #             "area": list(range(2, 6)),
 #             "count": list(range(6, 95))
 #         }
+
+class CustomFusionModule(nn.Module):
+    def __init__(self, fusion_in, fusion_hidden, num_answers):
+        super(CustomFusionModule, self).__init__()
+
+        self.dropout = nn.Dropout(DROPOUT_F)
+        
+        self.linear1 = nn.Linear(fusion_in, fusion_hidden)
+        self.tanh = nn.Tanh()
+        self.linear2 = nn.Linear(fusion_hidden, num_answers)
+
+    def forward(self, fused):
+        x = self.dropout(fused)
+        x = self.linear1(x)
+        x = self.tanh(x)
+        x = self.dropout(x)
+        x = self.linear2(x)
+        return x
 
 
 class MultiTaskVQAModel(nn.Module):
@@ -45,6 +65,8 @@ class MultiTaskVQAModel(nn.Module):
         self.linear_q = nn.Linear(QUESTION_OUT, FUSION_IN)
         self.linear_v = nn.Linear(VISUAL_OUT_VIT, FUSION_IN)
 
+        self.fusion = fusions.Mutan([FUSION_IN, FUSION_IN], FUSION_IN)
+
         self.question_type_to_num_answers = question_type_to_num_answers
         self.total_num_classes = 95
 
@@ -52,11 +74,8 @@ class MultiTaskVQAModel(nn.Module):
         # self.crossattention = attention.CrossAttention(FUSION_IN)
 
         self.classifiers = nn.ModuleList([
-            nn.Sequential(
-                nn.Linear(FUSION_IN, FUSION_HIDDEN),
-                nn.Tanh(),
-                nn.Linear(FUSION_HIDDEN, num_answers)
-            ) for num_answers in question_type_to_num_answers.values()
+            CustomFusionModule(FUSION_IN, FUSION_HIDDEN, num_answers) 
+            for num_answers in question_type_to_num_answers.values()
         ])
 
     def shared_parameters(self):
@@ -66,17 +85,20 @@ class MultiTaskVQAModel(nn.Module):
                 yield param
 
     def forward(self, input_v, input_q, question_type):
-        x_v = self.linear_v(input_v)
+        
+        x_v = self.dropoutV(input_v)
+        x_v = self.linear_v(x_v)
         x_v = torch.tanh(x_v)
 
         x_q = self.dropoutQ(input_q)
         x_q = self.linear_q(x_q)
         x_q = torch.tanh(x_q)
+        x = self.fusion([x_v, x_q])
         
         # x_q, _ = self.selfattention(x_q)
         # x_v, _ = self.crossattention(x_q, x_v)
 
-        x = torch.mul(x_v, x_q)
+        #x = torch.mul(x_v, x_q)
         # x = torch.squeeze(x, 1)
         # x = nn.Tanh()(x)
 

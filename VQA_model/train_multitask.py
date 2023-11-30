@@ -38,13 +38,13 @@ def vqa_collate_fn(batch):
 
     return questions_batch, answers_batch, images_batch, question_types_batch, question_types_str
 
-def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, experiment_name, wandb_args, num_workers=4):
+def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, lr_fc, experiment_name, wandb_args, num_workers=4):
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
     validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
     
     
     optimizer = torch.optim.Adam(model.shared_parameters(), lr=learning_rate)
-    optimizer_heads = [torch.optim.Adam(classifier.parameters(), lr=learning_rate) for classifier in model.classifiers]
+    optimizer_heads = [torch.optim.Adam(classifier.parameters(), lr=lr_fc[i]) for i, classifier in enumerate(model.classifiers, 0)]
     criterion = torch.nn.CrossEntropyLoss()
 
     # Create a directory for the experiment outputs
@@ -86,10 +86,9 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
         model = model.to("cuda")
         model.train()  # Switch to train mode
         runningLoss = 0.0
-        print(f'Starting epoch {epoch+1}/{num_epochs}')
 
         # add tqdm to the training loader, providing a progress bar based on the number of batches
-        progress_bar = tqdm(enumerate(train_loader, 0), total=len(train_loader), desc=f"Epoch {epoch+1}", position=0, leave=False)
+        progress_bar = tqdm(enumerate(train_loader, 0), total=len(train_loader), desc=f"Epoch {epoch}", position=0, leave=False)
 
         for i, data in progress_bar:
             question, answer, image, question_type, _ = data
@@ -137,10 +136,26 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                 answer_qt = answer[mask]
                 
                 loss_qt = criterion(pred_qt, answer_qt)
+
+                # Auxiliary loss for counting tasks
+                if qt == 3:
+                    # Convert predicted probabilities to count values
+                    # using argmax to get the most likely count
+                    predicted_counts = pred_qt.argmax(dim=1)
+                    actual_counts = answer_qt
+
+                    # Calculate auxiliary loss (e.g., MSE or MAE)
+                    auxiliary_loss_qt = torch.nn.functional.mse_loss(predicted_counts.float(), actual_counts.float())
+
+                    if i % log_interval == 0:
+                        wandb.log({"epoch": epoch, "auxiliary_loss": auxiliary_loss_qt})
+
+                    # Combine primary and auxiliary losses
+                    loss_qt += auxiliary_loss_qt
                 
                 task_specific_losses.append(loss_qt * normalized_weights[qt])
                 if i % log_interval == 0:
-                    wandb.log({f"loss_{qt}": loss_qt})
+                    wandb.log({"epoch": epoch, f"loss_{qt}": loss_qt})
             
             # Now, sum the task-specific losses
             loss_total = sum(task_specific_losses)
@@ -160,7 +175,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             optimizer.step()
             if i % log_interval == 0:
                 wandb.log({"epoch": epoch, "loss": loss})
-                wandb.log({"loss_total": loss_total})
+                wandb.log({"epoch": epoch, "loss_total": loss_total})
 
             # Update running loss and display it in the progress bar
             current_loss = loss.item() * question.size(0)
@@ -263,10 +278,10 @@ if __name__ == '__main__':
     torch.multiprocessing.set_start_method('spawn')
     torch.autograd.set_detect_anomaly(True)
     disable_log = False
-    
-    learning_rate = 0.00001
+    learning_rate = 1e-5
+    learning_rates = [1e-5, 1e-5, 1e-5, 3e-5]
     ratio_images_to_use = 1
-    modeltype = 'RNN_ViT-B-Multi-weight-norm'
+    modeltype = 'RNN_ViT-B-Multi-weight-norm-aux-loss'
     Dataset = 'HR'
 
     batch_size = 700
@@ -293,13 +308,13 @@ if __name__ == '__main__':
             "num_workers": num_workers,
             "log_interval": 100,
             "experiment_name": experiment_name,
-            "focus_increase_factors":  {3: 2.0} # Increase the weight of the count question type by 2x
+            "focus_increase_factors":  {} # Increase the weight of the a question type by x
         }
 
     train_dataset = VQADataset.VQADataset_Multitask(questions_train_path, images_path)
     validate_dataset = VQADataset.VQADataset_Multitask(questions_val_path, images_path) 
     
     RSVQA = multitask.MultiTaskVQAModel()
-    train(RSVQA, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, experiment_name, wandb_args, num_workers)
+    train(RSVQA, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, learning_rates, experiment_name, wandb_args, num_workers)
     
     
