@@ -151,8 +151,8 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                         wandb.log({"epoch": epoch, "auxiliary_loss": auxiliary_loss_qt})
 
                     # Combine primary and auxiliary losses
-                    loss_qt *= 0.8
-                    loss_qt += auxiliary_loss_qt * 0.2
+                    loss_qt #*= 0.8
+                    #loss_qt += auxiliary_loss_qt * 0.2
                 
                 task_specific_losses.append(loss_qt * normalized_weights[qt])
                 if i % log_interval == 0:
