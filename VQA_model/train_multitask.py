@@ -12,7 +12,7 @@ from tqdm import tqdm
 matplotlib.use('Agg')
 
 
-import VQADataset_Multitask as VQADataset
+import VQADataset_Att as VQADataset
 import torchvision.transforms as T
 import torch
 import numpy as np
@@ -23,7 +23,7 @@ import datetime
 
 import wandb
 from models import model_vit as model
-from models import multitask as multitask
+from models import multitask_attention as multitask
 
 def vqa_collate_fn(batch):
     # Separate the list of tuples into individual lists
@@ -43,7 +43,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
     validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
     
     
-    optimizer = torch.optim.Adam(model.shared_parameters(), lr=learning_rate)
+    #optimizer = torch.optim.Adam(model.shared_parameters(), lr=learning_rate)
     optimizer_heads = [torch.optim.Adam(classifier.parameters(), lr=lr_fc[i]) for i, classifier in enumerate(model.classifiers, 0)]
     criterion = torch.nn.CrossEntropyLoss()
 
@@ -144,14 +144,15 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                     predicted_counts = pred_qt.argmax(dim=1)
                     actual_counts = answer_qt
 
-                    # Calculate auxiliary loss (e.g., MSE or MAE)
-                    auxiliary_loss_qt = torch.nn.functional.mse_loss(predicted_counts.float(), actual_counts.float())
+                    # Calculate auxiliary loss MAE
+                    auxiliary_loss_qt = torch.nn.functional.l1_loss(predicted_counts.float(), actual_counts.float())
 
                     if i % log_interval == 0:
                         wandb.log({"epoch": epoch, "auxiliary_loss": auxiliary_loss_qt})
 
                     # Combine primary and auxiliary losses
-                    loss_qt += auxiliary_loss_qt
+                    loss_qt *= 0.8
+                    loss_qt += auxiliary_loss_qt * 0.2
                 
                 task_specific_losses.append(loss_qt * normalized_weights[qt])
                 if i % log_interval == 0:
@@ -161,7 +162,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             loss_total = sum(task_specific_losses)
 
             # Zero the gradients for the shared and task-specific parameters
-            optimizer.zero_grad()
+            #optimizer.zero_grad()
             for optimizer_head in optimizer_heads:
                 optimizer_head.zero_grad()
 
@@ -172,7 +173,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             for optimizer_head in optimizer_heads:
                 optimizer_head.step()
             # Now, update all parameters
-            optimizer.step()
+            #optimizer.step()
             if i % log_interval == 0:
                 wandb.log({"epoch": epoch, "loss": loss})
                 wandb.log({"epoch": epoch, "loss_total": loss_total})
@@ -279,26 +280,27 @@ if __name__ == '__main__':
     torch.autograd.set_detect_anomaly(True)
     disable_log = False
     learning_rate = 1e-5
-    learning_rates = [1e-5, 1e-5, 1e-5, 3e-5]
+    learning_rates = [1e-5, 1e-5, 1e-5, 1e-5]
     ratio_images_to_use = 1
-    modeltype = 'RNN_ViT-B-Multi-weight-norm-aux-loss'
+    modeltype = 'RNN_ViT-B-Multi-weight-norm-aux-loss_0.5'
     Dataset = 'HR'
 
-    batch_size = 700
+    batch_size = 70
     num_epochs = 35
     patch_size = 512   
-    num_workers = 0
+    num_workers = 12
 
     work_dir = os.getcwd()
     data_path = work_dir + '/data'
-    images_path = data_path + '/image_representations_vit'
-    questions_path = data_path + '/text_representations_mt'
+    images_path = data_path + '/image_representations_vit_att'
+    questions_path = data_path + '/text_representations_bert'
     questions_train_path = questions_path + '/train'
     questions_val_path = questions_path + '/val'
     experiment_name = f"{modeltype}_lr_{learning_rate}_batch_size_{batch_size}_run_{datetime.datetime.now().strftime('%m-%d_%H_%M')}"
 
     wandb_args = {
             "learning_rate": learning_rate,
+            "learning_rates_fc": learning_rates,
             "ratio_images_to_use": ratio_images_to_use,
             "modeltype": modeltype,
             "Dataset": Dataset,
@@ -311,8 +313,8 @@ if __name__ == '__main__':
             "focus_increase_factors":  {} # Increase the weight of the a question type by x
         }
 
-    train_dataset = VQADataset.VQADataset_Multitask(questions_train_path, images_path)
-    validate_dataset = VQADataset.VQADataset_Multitask(questions_val_path, images_path) 
+    train_dataset = VQADataset.VQADataset(questions_train_path, images_path)
+    validate_dataset = VQADataset.VQADataset(questions_val_path, images_path) 
     
     RSVQA = multitask.MultiTaskVQAModel()
     train(RSVQA, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, learning_rates, experiment_name, wandb_args, num_workers)
