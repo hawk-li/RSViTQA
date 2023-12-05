@@ -46,6 +46,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
     #optimizer = torch.optim.Adam(model.shared_parameters(), lr=learning_rate)
     optimizer_heads = [torch.optim.Adam(classifier.parameters(), lr=lr_fc[i]) for i, classifier in enumerate(model.classifiers, 0)]
     criterion = torch.nn.CrossEntropyLoss()
+    schedulers = [torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_head, patience=2, verbose=True, mode="max") for optimizer_head in optimizer_heads]
 
     # Create a directory for the experiment outputs
     output_dir = Path(f"outputs/{experiment_name}")
@@ -222,6 +223,13 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             print('epoch #%d val loss: %.3f' % (epoch, valLoss[epoch]))
             wandb.log({"val_loss": valLoss[-1]})
             print(datetime.datetime.now())  
+
+            question_type_to_idx = {
+                "presence": 0,
+                "comp": 0,
+                "area": 1,
+                "count": 2,
+            }
         
             numQuestions = 0
             numRightQuestions = 0
@@ -232,6 +240,8 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                     accPerQuestionType[question_type].append(accPerQuestiontype_tmp)
                     wandb.log({"epoch": epoch, question_type: accPerQuestiontype_tmp})
                     print(f"{question_type}: {accPerQuestiontype_tmp}")
+                    schedulers[question_type_to_idx[question_type]].step(accPerQuestiontype_tmp)
+                    wandb.log({"epoch": epoch, f"lr_{question_type}": schedulers[question_type_to_idx[question_type]].optimizer.param_groups[0]['lr']})
                 numQuestions += countQuestionType[question_type]
                 numRightQuestions += rightAnswerByQuestionType[question_type]
                 currentAA += accPerQuestionType[question_type][epoch]
@@ -282,13 +292,13 @@ if __name__ == '__main__':
     learning_rate = 1e-5
     learning_rates = [1e-5, 1e-5, 1e-5, 1e-5]
     ratio_images_to_use = 1
-    modeltype = 'RNN_ViT-B-Multi-weight-norm-aux-loss_0.5'
+    modeltype = 'ViT-Bert-Attention-Multitask'
     Dataset = 'HR'
 
     batch_size = 70
     num_epochs = 35
     patch_size = 512   
-    num_workers = 12
+    num_workers = 8 
 
     work_dir = os.getcwd()
     data_path = work_dir + '/data'
@@ -310,7 +320,9 @@ if __name__ == '__main__':
             "num_workers": num_workers,
             "log_interval": 100,
             "experiment_name": experiment_name,
-            "focus_increase_factors":  {} # Increase the weight of the a question type by x
+            "focus_increase_factors":  {}, # Increase the weight of the a question type by x
+            "fusion_in": 512,
+            "fusion_hidden": 256,
         }
 
     train_dataset = VQADataset.VQADataset(questions_train_path, images_path)
