@@ -290,7 +290,7 @@ if __name__ == '__main__':
     torch.autograd.set_detect_anomaly(True)
     disable_log = False
     learning_rate = 1e-5
-    learning_rates = [1e-5, 1e-5, 1e-5, 1e-5]
+    learning_rates = [1e-5, 1e-5, 1e-5, 2e-5]
     ratio_images_to_use = 1
     modeltype = 'ViT-Bert-Attention-Multitask'
     Dataset = 'HR'
@@ -298,12 +298,12 @@ if __name__ == '__main__':
     batch_size = 70
     num_epochs = 35
     patch_size = 512   
-    num_workers = 8 
+    num_workers = 2
 
     work_dir = os.getcwd()
     data_path = work_dir + '/data'
     images_path = data_path + '/image_representations_vit_att'
-    questions_path = data_path + '/text_representations_bert'
+    questions_path = data_path + '/text_representations_bert_att'
     questions_train_path = questions_path + '/train'
     questions_val_path = questions_path + '/val'
     experiment_name = f"{modeltype}_lr_{learning_rate}_batch_size_{batch_size}_run_{datetime.datetime.now().strftime('%m-%d_%H_%M')}"
