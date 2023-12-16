@@ -62,11 +62,14 @@ class VQAModel(nn.Module):
         v = nn.Tanh()(v)
 
         ## Fusion & Classification         
-        #x = torch.mul(v, q)
+        x = torch.mul(v, q)
+
         #x = torch.cat((v, q), 1)
-        x = self.fusion([v, q])
-        
         #x = torch.squeeze(x, 1)
+        
+        #x = self.fusion([v, q])
+        
+        
         x = nn.Tanh()(x)
         x = self.dropoutF(x)
         x = self.linear_classif1(x)

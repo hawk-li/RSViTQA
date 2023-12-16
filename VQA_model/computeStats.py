@@ -7,9 +7,9 @@
 # Calcul des statistiques sur un jeu de test
 
 import textwrap
-import VocabEncoder as VocabEncoder
-import VQADataset as VQADataset
-from models import model_vit_bert as model
+import utils.VocabEncoder as VocabEncoder
+import VQADataset_Att as VQADataset
+from models import model as model
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
@@ -22,6 +22,8 @@ import pickle
 import os
 from tqdm import tqdm
 import torch.utils.data.dataloader as dataloader
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
 
 def do_confusion_matrix(all_mat, old_vocab, new_vocab, dataset):
     print(new_vocab)
@@ -91,7 +93,7 @@ def load_dataset(text_path, images_path, batch_size=100, num_workers=6):
 
 def run(network, text_path, images_path, experiment, dataset, num_batches=-1, save_output=False):
     test_dataset = VQADataset.VQADataset(text_path, images_path)
-    test_loader = dataloader.DataLoader(test_dataset, batch_size=70, shuffle=False, persistent_workers=False, pin_memory=True, num_workers=0)
+    test_loader = dataloader.DataLoader(test_dataset, batch_size=70, shuffle=False, persistent_workers=True, pin_memory=True, num_workers=6)
     batch_size = 100
     patch_size = 512
     
@@ -105,6 +107,10 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
     encoder_answers = get_vocab(dataset)
     confusionMatrix = np.zeros((len(encoder_answers), len(encoder_answers)))
     progress_bar = tqdm(enumerate(test_loader, 0), total=len(test_loader))
+    count_preds = []
+    count_answers = []
+    count_absoulte_error = []
+    count_mean_squared_error = []
     for i, data in progress_bar:
         if num_batches == 0:
             break
@@ -114,10 +120,29 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
         question = question.to("cuda")
         image = image.to("cuda")
 
-        pred = network(image,question)
+        pred = network(image,question)#, type_idx)
         
         answer = answer.cpu().numpy()
         pred = np.argmax(pred.cpu().detach().numpy(), axis=1)
+
+        # decode answer and pred
+        answers = [encoder_answers[a] for a in answer]
+        preds = [encoder_answers[p] for p in pred]
+        type_string = [t for t in type_str]
+
+        for t, i in zip(type_string, range(len(type_string))):
+            if t == "count":
+                try: 
+                    temp = int(preds[i])
+                    temp2 = int(answers[i])
+                except ValueError:
+                    continue
+                count_preds.append(int(preds[i]))
+                count_answers.append(int(answers[i]))
+                count_absoulte_error.append(abs(int(preds[i]) - int(answers[i])))
+                count_mean_squared_error.append((int(preds[i]) - int(answers[i]))**2)
+
+
 
 
         for j in range(answer.shape[0]):
@@ -125,39 +150,6 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
             if answer[j] == pred[j]:
                 rightAnswerByQuestionType[type_str[j]] += 1
             confusionMatrix[answer[j], pred[j]] += 1
-            
-        if save_output:
-            out_path = os.path.join(work_dir, 'output')
-            if not os.path.exists(out_path):
-                os.mkdir(out_path)
-            for j in range(answer.shape[0]):
-                viz_img = get_image(image_id[j])  # Get the image
-                viz_question = question_str[j] + '?'
-                viz_answer = encoder_answers[answer[j]]
-                viz_pred = encoder_answers[pred[j]]
-
-                wrapped_question = textwrap.fill(viz_question, width=50)
-
-                # Create a figure and axis for the plot with width 10 and height 5
-                fig, ax = plt.subplots(1, 1, figsize=(5, 10))
-
-                # disable axis
-                ax.axis('off')
-                ax.imshow(viz_img)  # Display the image
-
-                # Annotate the plot with the question, ground truth, and prediction
-                title_text = f'Q: {wrapped_question}\nGround Truth: {viz_answer}\nPrediction: {viz_pred}'
-                plt.title(title_text)
-
-                # Define the image name
-                imname = f'{i * batch_size + j}_q_{viz_question}_gt_{viz_answer}_pred_{viz_pred}.png'
-                imname = imname.replace('?', '')  # Replace special characters
-
-                # Save the plot
-                plt.savefig(os.path.join(out_path, imname))
-
-                # Close the plot to free memory
-                plt.close(fig)
     
     Accuracies = {'AA': 0}
     for type_str in countQuestionType.keys():
@@ -170,19 +162,53 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
         print (' - ' + type_str + ': ' + str(Accuracies[type_str]))
     print('- AA: ' + str(Accuracies['AA']))
     print('- OA: ' + str(Accuracies['OA']))
+    combined_list = [int(item) for item in count_preds + count_answers]
+    unique_labels = np.unique(combined_list)
+    sorted_labels = np.sort(unique_labels)
+    cm = confusion_matrix(count_answers, count_preds, labels=sorted_labels)
+    cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+    # Plotting the confusion matrix with annotations
+    plt.figure(figsize=(24,20))
+    sns.heatmap(cm_normalized, annot=False, fmt='d', xticklabels=sorted_labels, yticklabels=sorted_labels)
+    plt.xlabel('Predicted')
+    plt.ylabel('Ground Truth')
+    plt.title('Confusion Matrix')
+    plt.savefig('confusion_matrix_' + experiment.split('/')[0] + '.png', dpi=300, bbox_inches='tight')
+
+    print(f"MAE: {np.mean(count_absoulte_error)}")
+    print(f"MSE: {np.mean(count_mean_squared_error)}")
+
+    # second heatmap with not normalized confusion matrix
+    plt.figure(figsize=(24,20))
+    sns.heatmap(cm, annot=True, fmt='.2f', xticklabels=sorted_labels, yticklabels=sorted_labels)
+    plt.xlabel('Predicted')
+    plt.ylabel('Ground Truth')
+    plt.title('Confusion Matrix')
+    plt.savefig('confusion_matrix_' + experiment.split('/')[0] + '_abs.png', dpi=300, bbox_inches='tight')
+
+
+    cm_log_scale = np.log(cm + 1)  # Adding 1 to avoid log(0)
+
+    plt.figure(figsize=(24,20))
+    sns.heatmap(cm_log_scale, annot=False, fmt="d", yticklabels=sorted_labels, xticklabels=sorted_labels)
+    plt.xlabel('Predicted')
+    plt.ylabel('Ground Truth')
+    plt.title('Confusion Matrix (Log Scale)')
+    plt.savefig('confusion_matrix_' + experiment.split('/')[0] + '_log.png', dpi=300, bbox_inches='tight')
+
     
     return Accuracies, confusionMatrix
 
 if __name__ == '__main__':
     expes = {
-            'HR': ['BERT_ViT_lr_1e-05_batch_size_70_run_11-14_13_00/RSVQA_model_epoch'],
+            'HR': ['ViT-BERT-Attention-HADAMARD_lr_1e-05_batch_size_70_run_12-13_11_26/RSVQA_model_epoch'],
             #'HRPhili': ['RSVQA_ViT-CLS_RNN_512_100_35_0.00001_HR_2023-30-10/RSVQA_model_epoch'],
     }
     work_dir = os.getcwd()
     data_path = work_dir + '/data'
 
-    images_path = os.path.join(data_path, 'image_representations_vit')
-    text_path = os.path.join(data_path, 'text_representations_bert/test')
+    images_path = os.path.join(data_path, 'image_representations_vit_att')
+    text_path = os.path.join(data_path, 'text_representations_bert_att/test')
     #test_loader = load_dataset(text_path, images_path, batch_size=100)
     for dataset in expes.keys():
         acc = []
@@ -224,7 +250,7 @@ if __name__ == '__main__':
         else:
             new_vocab = ['yes', 'no', 'rural', 'urban', '0', 'between 0 and 10', 'between 10 and 100', 'between 100 and 1000', 'more than 1000']
             
-        do_confusion_matrix(all_mat, vocab, new_vocab, dataset)
+        #do_confusion_matrix(all_mat, vocab, new_vocab, dataset)
 
 
 #labels = ['Yes', 'No', '<=10', '0', '<=100', '<=1000', '>1000', 'Rural', 'Urban']
