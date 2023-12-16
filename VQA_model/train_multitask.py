@@ -46,7 +46,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
     #optimizer = torch.optim.Adam(model.shared_parameters(), lr=learning_rate)
     optimizer_heads = [torch.optim.Adam(classifier.parameters(), lr=lr_fc[i]) for i, classifier in enumerate(model.classifiers, 0)]
     criterion = torch.nn.CrossEntropyLoss()
-    schedulers = [torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_head, patience=2, verbose=True, mode="max") for optimizer_head in optimizer_heads]
+    schedulers = [torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_head, patience=3, verbose=True, mode="max") for optimizer_head in optimizer_heads]
 
     # Create a directory for the experiment outputs
     output_dir = Path(f"outputs/{experiment_name}")
@@ -321,7 +321,7 @@ if __name__ == '__main__':
             "log_interval": 100,
             "experiment_name": experiment_name,
             "focus_increase_factors":  {}, # Increase the weight of the a question type by x
-            "fusion_in": 512,
+            "fusion_in": 600,
             "fusion_hidden": 256,
         }
 

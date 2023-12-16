@@ -8,6 +8,7 @@ HIDDEN_DIMENSION_ATTENTION = 512
 HIDDEN_DIMENSION_CROSS = 5000
 FUSION_IN = 800
 FUSION_HIDDEN = 256
+FUSION_HIDDEN_2 = 64
 DROPOUT_V = 0.5
 DROPOUT_Q = 0.5
 DROPOUT_F = 0.5
@@ -49,7 +50,8 @@ class CustomFusionModule(nn.Module):
         
         self.linear1 = nn.Linear(fusion_in*2, fusion_hidden)
         self.tanh = nn.Tanh()
-        self.linear2 = nn.Linear(fusion_hidden, num_answers)
+        self.linear2 = nn.Linear(fusion_hidden, FUSION_HIDDEN_2)
+        self.linear3 = nn.Linear(FUSION_HIDDEN_2, num_answers)
 
     def forward(self, input_v, input_q):
         ## Dropouts
@@ -78,6 +80,9 @@ class CustomFusionModule(nn.Module):
         x = nn.Tanh()(x)
         x = self.dropoutF(x)
         x = self.linear2(x)
+        x = nn.Tanh()(x)
+        x = self.dropoutF(x)
+        x = self.linear3(x)
         return x
 
 
