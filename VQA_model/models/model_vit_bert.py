@@ -37,7 +37,7 @@ class VQAModel(nn.Module):
         self.linear_q = nn.Linear(QUESTION_OUT, FUSION_IN)
         self.linear_v = nn.Linear(VISUAL_OUT_VIT, FUSION_IN)
 
-        self.fusion = fusions.Block([FUSION_IN, FUSION_IN], FUSION_IN)
+        #self.fusion = fusions.Mutan([FUSION_IN, FUSION_IN], FUSION_IN)
         
         self.linear_classif1 = nn.Linear(FUSION_IN, FUSION_HIDDEN)
         self.linear_classif2 = nn.Linear(FUSION_HIDDEN, self.num_classes)
@@ -51,10 +51,10 @@ class VQAModel(nn.Module):
         x_q = self.linear_q(x_q)
         x_q = nn.Tanh()(x_q)
         
-        x = self.fusion([x_v, x_q])
-        #x = torch.mul(x_v, x_q)
+        #x = self.fusion([x_v, x_q])
+        x = torch.mul(x_v, x_q)
         #x = torch.squeeze(x, 1)
-        #x = nn.Tanh()(x)
+        x = nn.Tanh()(x)
         x = self.dropoutF(x)
         x = self.linear_classif1(x)
         x = nn.Tanh()(x)

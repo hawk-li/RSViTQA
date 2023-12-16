@@ -46,7 +46,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
     #optimizer = torch.optim.Adam(model.shared_parameters(), lr=learning_rate)
     optimizer_heads = [torch.optim.Adam(classifier.parameters(), lr=lr_fc[i]) for i, classifier in enumerate(model.classifiers, 0)]
     criterion = torch.nn.CrossEntropyLoss()
-    schedulers = [torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_head, patience=2, verbose=True, mode="max") for optimizer_head in optimizer_heads]
+    schedulers = [torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_head, patience=3, verbose=True, mode="max") for optimizer_head in optimizer_heads]
 
     # Create a directory for the experiment outputs
     output_dir = Path(f"outputs/{experiment_name}")
@@ -155,7 +155,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                     loss_qt #*= 0.8
                     #loss_qt += auxiliary_loss_qt * 0.2
                 
-                task_specific_losses.append(loss_qt * normalized_weights[qt])
+                task_specific_losses.append(loss_qt) #* normalized_weights[qt])
                 if i % log_interval == 0:
                     wandb.log({"epoch": epoch, f"loss_{qt}": loss_qt})
             
@@ -168,7 +168,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                 optimizer_head.zero_grad()
 
             # Backpropagate the total loss
-            loss_total.backward()
+            loss.backward()
 
             
             for optimizer_head in optimizer_heads:
@@ -298,12 +298,12 @@ if __name__ == '__main__':
     batch_size = 70
     num_epochs = 35
     patch_size = 512   
-    num_workers = 8 
+    num_workers = 7
 
     work_dir = os.getcwd()
     data_path = work_dir + '/data'
     images_path = data_path + '/image_representations_vit_att'
-    questions_path = data_path + '/text_representations_bert'
+    questions_path = data_path + '/text_representations_bert_att'
     questions_train_path = questions_path + '/train'
     questions_val_path = questions_path + '/val'
     experiment_name = f"{modeltype}_lr_{learning_rate}_batch_size_{batch_size}_run_{datetime.datetime.now().strftime('%m-%d_%H_%M')}"
@@ -321,7 +321,7 @@ if __name__ == '__main__':
             "log_interval": 100,
             "experiment_name": experiment_name,
             "focus_increase_factors":  {}, # Increase the weight of the a question type by x
-            "fusion_in": 512,
+            "fusion_in": 600,
             "fusion_hidden": 256,
         }
 

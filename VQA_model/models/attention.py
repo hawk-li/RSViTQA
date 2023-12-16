@@ -1,83 +1,95 @@
-import torch
+from torchvision import models as torchmodels
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils.weight_norm import weight_norm
+import torch
 
-class SelfAttention(nn.Module):
-    def __init__(self, feature_size):
-        super(SelfAttention, self).__init__()
-        # Initialize weight matrices for Q, K, and V
-        self.W_q = weight_norm(nn.Linear(feature_size, feature_size, bias=False))
-        self.W_k = weight_norm(nn.Linear(feature_size, feature_size, bias=False))
-        self.W_v = weight_norm(nn.Linear(feature_size, feature_size, bias=False))
+class SelfAttentionQuestion(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(SelfAttentionQuestion, self).__init__()
+        self.inner_matrix = nn.Linear(input_dim, hidden_dim, bias=False)
+        self.outer_matrix = nn.Linear(hidden_dim, output_dim, bias=False)
+
+    def forward(self, input_q):
+        # print("Shape of input_q:", input_q.shape)
         
-        # Save the feature size to scale the dot product attention scores
-        self.d_k = feature_size
+        q = self.inner_matrix(input_q)
+        q = nn.ReLU()(q)
+        #print("Shape of q after inner matrix:", q.shape)
 
-        # Initialize dropout layer
-        self.dropout = nn.Dropout(0.2)
-
-    def forward(self, x):
-        # x is assumed to be of shape [batch_size, seq_len, feature_size]
+        q = self.outer_matrix(q)
+        q = nn.Softmax(dim=1)(q)
+        #print("Shape of q after outer matrix and before squeeze:", q.shape) 
         
-        # Compute Q, K, V matrices
-        Q = self.W_q(x)
-        K = self.W_k(x)
-        V = self.W_v(x)
+        q = torch.squeeze(q, -1)  # Removing the last dimension, now shape is batch_size x 35
+        #print("Shape of q after squeeze:", q.shape)            
 
-        # Calculate attention scores
-        attention_scores = torch.matmul(Q, K.transpose(-2, -1))
+        q = torch.unsqueeze(q, 1)  # Adding a dimension at index 1, now shape is batch_size x 1 x 35  
+        #print("Shape of q after unsqueeze:", q.shape)
 
-        # Scale scores
-        scaled_attention_scores = attention_scores / torch.sqrt(torch.tensor(self.d_k).float())
+        output_q = torch.matmul(q, input_q).squeeze(1)
+        #print("Shape of q after matmul:", output_q.shape)
 
-        # Apply softmax on the last dimension to obtain the attention probabilities
-        attention_weights = F.softmax(scaled_attention_scores, dim=-1)
+        #print("Self-Attention Question completed")
 
-        # Apply dropout on the attention weights
-        attention_weights = self.dropout(attention_weights)
-
-        # Weight the values by the attention weights
-        weighted_values = torch.matmul(attention_weights, V)
-
-        return weighted_values, attention_weights
+        return output_q
     
 class CrossAttention(nn.Module):
-    def __init__(self, feature_size):
+    def __init__(self, output_dim, input_dim_q, input_dim_v):
         super(CrossAttention, self).__init__()
-        # Initialize weight matrices for Q, K, and V
-        self.W_q = weight_norm(nn.Linear(feature_size, feature_size, bias=False))
-        self.W_k = weight_norm(nn.Linear(feature_size, feature_size, bias=False))
-        self.W_v = weight_norm(nn.Linear(feature_size, feature_size, bias=False))
 
-        # Save the feature size to scale the dot product attention scores
-        self.d_k = feature_size
+        self.cross_q = nn.Linear(input_dim_q, output_dim, bias=False)
+        self.cross_v = nn.Linear(input_dim_v, output_dim, bias=False)
 
-        # Initialize dropout layer
-        self.dropout = nn.Dropout(0.2)
-
-    def forward(self, x, y):
-        # x is assumed to be of shape [batch_size, seq_len_x, feature_size]
-        # y is assumed to be of shape [batch_size, seq_len_y, feature_size]
+    def forward(self, input_q, input_v):
+        # print("Shape of input q:", input_q.shape)
+        # print("Shape of input v:", input_v.shape)
         
-        # Compute Q, K, V matrices
-        Q = self.W_q(x)
-        K = self.W_k(y)
-        V = self.W_v(y)
+        x_q = self.cross_q(input_q)
+        x_v = self.cross_v(input_v)
+        # print("Shape of x_q:", x_q.shape)
+        # print("Shape of x_v:", x_v.shape)
 
-        # Calculate attention scores
-        attention_scores = torch.matmul(Q, K.transpose(-2, -1))
+        x_q = x_q.unsqueeze(1)
+        # print("Shape of x_q after unsqueeze:", x_q.shape)
+        
+        x_v_attn = torch.mul(x_v, x_q)
+        # print("Shape of x_v_attn:", x_v_attn.shape)
+        
+        x_v_attn = nn.Dropout(p=0.15)(x_v_attn)
+        x_v_attn = F.normalize(x_v_attn, p=2, dim=2)
+        # print("Shape of x_v_attn after dropout and norm:", x_v_attn.shape)
 
-        # Scale scores
-        scaled_attention_scores = attention_scores / torch.sqrt(torch.tensor(self.d_k).float())
+        # print("Cross-Attention completed")
+        
+        return x_v_attn
+    
+class SelfAttentionImage(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(SelfAttentionImage, self).__init__()
+        self.inner_matrix = nn.Linear(input_dim, hidden_dim, bias=False)
+        self.outer_matrix = nn.Linear(hidden_dim, output_dim, bias=False)
 
-        # Apply softmax on the last dimension to obtain the attention probabilities
-        attention_weights = F.softmax(scaled_attention_scores, dim=-1)
+    def forward(self, v_proc, input_v):
+        # print("Shape of input_v:", input_v.shape)
+        # print("Shape of v_proc:", v_proc.shape)
+        
+        v = self.inner_matrix(v_proc)
+        v = nn.ReLU()(v)
+        # print("Shape of v after inner matrix:", v.shape)
 
-        # Apply dropout on the attention weights
-        attention_weights = self.dropout(attention_weights)
+        v = self.outer_matrix(v)
+        v = nn.Softmax(dim=1)(v)
+        # print("Shape of v after outer matrix and before squeeze:", v.shape) 
+        
+        v = torch.squeeze(v, -1)  # Removing the last dimension, now shape is batch_size x 35
+        # print("Shape of v after squeeze:", v.shape)            
 
-        # Weight the values by the attention weights
-        weighted_values = torch.matmul(attention_weights, V)
+        v = torch.unsqueeze(v, 1)  # Adding a dimension at index 1, now shape is batch_size x 1 x 35  
+        # print("Shape of v after unsqueeze:", v.shape)
 
-        return weighted_values, attention_weights
+        output_v = torch.matmul(v, input_v).squeeze(1)
+        # print(output_v.shape)
+
+        # print("Cross-Attention completed")
+
+        return output_v

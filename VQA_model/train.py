@@ -12,7 +12,7 @@ from tqdm import tqdm
 matplotlib.use('Agg')
 
 
-import VQADataset
+import VQADataset_Att as VQADataset
 import torchvision.transforms as T
 import torch
 import numpy as np
@@ -29,7 +29,7 @@ from models import model
 
 def vqa_collate_fn(batch):
     # Separate the list of tuples into individual lists
-    questions, answers, images, question_types = zip(*batch)
+    questions, answers, images, question_types, _ = zip(*batch)
 
     # Convert tuples to appropriate tensor batches
     questions_batch = torch.stack(questions)
@@ -40,8 +40,8 @@ def vqa_collate_fn(batch):
     return questions_batch, answers_batch, images_batch, question_types
 
 def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, experiment_name, wandb_args, num_workers=4):
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
-    validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, persistent_workers=True, pin_memory=True, collate_fn=vqa_collate_fn)
+    validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, persistent_workers=True, pin_memory=True, collate_fn=vqa_collate_fn)
     
     model = model.to("cuda")
     
@@ -227,28 +227,28 @@ if __name__ == '__main__':
             'num_epochs': 35,
             'learning_rate': 0.00001
             },
-            {
-            'batch_size': 700,
-            'num_epochs': 35,
-            'learning_rate': 0.00001
-            },
-            {
-            'batch_size': 700,
-            'num_epochs': 35,
-            'learning_rate': 0.0001
-            },
-            {
-            'batch_size': 1400,
-            'num_epochs': 35,
-            'learning_rate': 0.0001
-            }
+            # {
+            # 'batch_size': 700,
+            # 'num_epochs': 35,
+            # 'learning_rate': 0.00001
+            # },
+            # {
+            # 'batch_size': 700,
+            # 'num_epochs': 35,
+            # 'learning_rate': 0.0001
+            # },
+            # {
+            # 'batch_size': 1400,
+            # 'num_epochs': 35,
+            # 'learning_rate': 0.0001
+            # }
         ]
 
     
-    modeltype = 'RNN_Res'
+    modeltype = 'ViT-BERT-Attention-CONCAT'
     Dataset = 'HR'
     patch_size = 512   
-    num_workers = 0
+    num_workers = 6
 
 
     for config in train_configs:
@@ -258,8 +258,8 @@ if __name__ == '__main__':
 
         work_dir = os.getcwd()
         data_path = work_dir + '/data'
-        images_path = data_path + '/image_representations'
-        questions_path = data_path + '/text_representations'
+        images_path = data_path + '/image_representations_vit_att'
+        questions_path = data_path + '/text_representations_bert_att'
         questions_train_path = questions_path + '/train'
         questions_val_path = questions_path + '/val'
         experiment_name = f"{modeltype}_lr_{learning_rate}_batch_size_{batch_size}_run_{datetime.datetime.now().strftime('%m-%d_%H_%M')}"
@@ -279,7 +279,7 @@ if __name__ == '__main__':
         train_dataset = VQADataset.VQADataset(questions_train_path, images_path)
         validate_dataset = VQADataset.VQADataset(questions_val_path, images_path) 
         
-        RSVQA = model.VQAModel(input_size = patch_size)
+        RSVQA = model.VQAModel()
         train(RSVQA, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, experiment_name, wandb_args, num_workers)
     
     
