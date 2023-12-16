@@ -166,6 +166,10 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
     unique_labels = np.unique(combined_list)
     sorted_labels = np.sort(unique_labels)
     cm = confusion_matrix(count_answers, count_preds, labels=sorted_labels)
+    # convert confusion matrix to list and save
+    confusionMatrix = cm.copy().tolist()
+    # save confusion matrix
+    np.save('confusion_matrix_' + experiment.split('/')[0], confusionMatrix)
     cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
     # Plotting the confusion matrix with annotations
     plt.figure(figsize=(24,20))
@@ -180,7 +184,7 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
 
     # second heatmap with not normalized confusion matrix
     plt.figure(figsize=(24,20))
-    sns.heatmap(cm, annot=True, fmt='.2f', xticklabels=sorted_labels, yticklabels=sorted_labels)
+    sns.heatmap(cm, annot=False, fmt='.2f', xticklabels=sorted_labels, yticklabels=sorted_labels)
     plt.xlabel('Predicted')
     plt.ylabel('Ground Truth')
     plt.title('Confusion Matrix')
@@ -236,19 +240,19 @@ if __name__ == '__main__':
                 all_acc.append(tmp_acc[type_str])
             print(' - ' + type_str + ': ' + str(np.mean(all_acc)) + ' ( stddev = ' + str(np.std(all_acc)) + ')')
         
-        if dataset[-1] == 's':
-            vocab = get_vocab(dataset[:-1])
-        else:
-            vocab = get_vocab(dataset)
+        # if dataset[-1] == 's':
+        #     vocab = get_vocab(dataset[:-1])
+        # else:
+        #     vocab = get_vocab(dataset)
 
-        all_mat = np.zeros(tmp_mat.shape)    
-        for tmp_mat in mat:
-            all_mat += tmp_mat
+        # all_mat = np.zeros(tmp_mat.shape)    
+        # for tmp_mat in mat:
+        #     all_mat += tmp_mat
         
-        if dataset[0] == 'H':
-            new_vocab = ['yes', 'no', '0m2', 'between 0m2 and 10m2', 'between 10m2 and 100m2', 'between 100m2 and 1000m2', 'more than 1000m2'] + [str(i) for i in range(90)]
-        else:
-            new_vocab = ['yes', 'no', 'rural', 'urban', '0', 'between 0 and 10', 'between 10 and 100', 'between 100 and 1000', 'more than 1000']
+        # if dataset[0] == 'H':
+        #     new_vocab = ['yes', 'no', '0m2', 'between 0m2 and 10m2', 'between 10m2 and 100m2', 'between 100m2 and 1000m2', 'more than 1000m2'] + [str(i) for i in range(90)]
+        # else:
+        #     new_vocab = ['yes', 'no', 'rural', 'urban', '0', 'between 0 and 10', 'between 10 and 100', 'between 100 and 1000', 'more than 1000']
             
         #do_confusion_matrix(all_mat, vocab, new_vocab, dataset)
 
