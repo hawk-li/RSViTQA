@@ -39,8 +39,8 @@ def vqa_collate_fn(batch):
     return questions_batch, answers_batch, images_batch, question_types_batch, question_types_str
 
 def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, lr_fc, experiment_name, wandb_args, num_workers=4):
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
-    validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, persistent_workers=True, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
+    validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
     
     
     #optimizer = torch.optim.Adam(model.shared_parameters(), lr=learning_rate)
@@ -290,9 +290,9 @@ if __name__ == '__main__':
     torch.autograd.set_detect_anomaly(True)
     disable_log = False
     learning_rate = 1e-5
-    learning_rates = [1e-5, 1e-5, 1e-5, 1e-5]
+    learning_rates = [1e-5, 1e-5, 2e-5, 1e-5]
     ratio_images_to_use = 1
-    modeltype = 'ViT-Bert-Attention-Multitask'
+    modeltype = 'ViT-Bert-Attention-Multitask-Mutan'
     Dataset = 'HR'
 
     batch_size = 70

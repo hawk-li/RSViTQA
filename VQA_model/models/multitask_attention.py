@@ -46,6 +46,8 @@ class CustomFusionModule(nn.Module):
         self.linear_v = nn.Linear(VISUAL_OUT, FUSION_IN)
 
         self.dropout = nn.Dropout(DROPOUT_F)
+
+        self.fusion = fusions.Mutan([FUSION_IN, FUSION_IN], FUSION_IN)
         
         self.linear1 = nn.Linear(fusion_in, fusion_hidden)
         self.tanh = nn.Tanh()
@@ -68,8 +70,8 @@ class CustomFusionModule(nn.Module):
         v = nn.Tanh()(v)
 
         ## Fusion & Classification         
-        x = torch.mul(v, q)
-        #x = self.fusion([v, q])
+        # x = torch.mul(v, q)
+        x = self.fusion([v, q])
         
         # x = torch.squeeze(x, 1)
         x = nn.Tanh()(x)
