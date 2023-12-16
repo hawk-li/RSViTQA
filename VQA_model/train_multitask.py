@@ -39,8 +39,8 @@ def vqa_collate_fn(batch):
     return questions_batch, answers_batch, images_batch, question_types_batch, question_types_str
 
 def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, lr_fc, experiment_name, wandb_args, num_workers=4):
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
-    validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, persistent_workers=True, pin_memory=True, collate_fn=vqa_collate_fn)
+    validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, persistent_workers=True, pin_memory=True, collate_fn=vqa_collate_fn)
     
     
     #optimizer = torch.optim.Adam(model.shared_parameters(), lr=learning_rate)
@@ -155,7 +155,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                     loss_qt #*= 0.8
                     #loss_qt += auxiliary_loss_qt * 0.2
                 
-                task_specific_losses.append(loss_qt * normalized_weights[qt])
+                task_specific_losses.append(loss_qt) #* normalized_weights[qt])
                 if i % log_interval == 0:
                     wandb.log({"epoch": epoch, f"loss_{qt}": loss_qt})
             
@@ -168,7 +168,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                 optimizer_head.zero_grad()
 
             # Backpropagate the total loss
-            loss_total.backward()
+            loss.backward()
 
             
             for optimizer_head in optimizer_heads:
@@ -298,7 +298,7 @@ if __name__ == '__main__':
     batch_size = 70
     num_epochs = 35
     patch_size = 512   
-    num_workers = 2
+    num_workers = 7
 
     work_dir = os.getcwd()
     data_path = work_dir + '/data'
