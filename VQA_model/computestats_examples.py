@@ -7,9 +7,9 @@
 # Calcul des statistiques sur un jeu de test
 
 import textwrap
-import VocabEncoder as VocabEncoder
-import VQADataset as VQADataset
-from models import model_vit_bert as model
+import utils.VocabEncoder as VocabEncoder
+import VQADataset_Att as VQADataset
+from models import model as model
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
@@ -89,9 +89,9 @@ def load_dataset(text_path, images_path, batch_size=100, num_workers=6):
 
     return test_loader
 
-def run(network, text_path, images_path, experiment, dataset, num_batches=-1, save_output=False):
+def run(network, text_path, images_path, experiment, dataset, num_batches=-1, save_output=True):
     test_dataset = VQADataset.VQADataset(text_path, images_path)
-    test_loader = dataloader.DataLoader(test_dataset, batch_size=70, shuffle=False, persistent_workers=False, pin_memory=True, num_workers=0)
+    test_loader = dataloader.DataLoader(test_dataset, batch_size=70, shuffle=False, persistent_workers=True, pin_memory=True, num_workers=6)
     batch_size = 100
     patch_size = 512
     
@@ -109,7 +109,7 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
         if num_batches == 0:
             break
         num_batches -= 1
-        question, answer, image, type_str = data#type_idx, type_str, question_str, image_id = data
+        question, answer, image, type_idx, type_str, question_str, image_id = data
         answer = answer.squeeze(1).to("cuda")
         question = question.to("cuda")
         image = image.to("cuda")
@@ -175,14 +175,14 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
 
 if __name__ == '__main__':
     expes = {
-            'HR': ['BERT_ViT_lr_1e-05_batch_size_70_run_11-14_13_00/RSVQA_model_epoch'],
+            'HR': ['ViT-BERT-Attention-MUTAN_lr_1e-05_batch_size_70_run_12-12_14_39/RSVQA_model_epoch'],
             #'HRPhili': ['RSVQA_ViT-CLS_RNN_512_100_35_0.00001_HR_2023-30-10/RSVQA_model_epoch'],
     }
     work_dir = os.getcwd()
     data_path = work_dir + '/data'
 
-    images_path = os.path.join(data_path, 'image_representations_vit')
-    text_path = os.path.join(data_path, 'text_representations_bert/test')
+    images_path = os.path.join(data_path, 'image_representations_vit_att')
+    text_path = os.path.join(data_path, 'text_representations_bert_att/test_q_str')
     #test_loader = load_dataset(text_path, images_path, batch_size=100)
     for dataset in expes.keys():
         acc = []

@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from attention import SelfAttentionQuestion, CrossAttention, SelfAttentionImage
+from models.attention import SelfAttentionQuestion, CrossAttention, SelfAttentionImage
 
 VISUAL_OUT = 768
 QUESTION_OUT = 768
@@ -48,7 +48,7 @@ class CustomFusionModule(nn.Module):
 
         self.dropout = nn.Dropout(DROPOUT_F)
         
-        self.linear1 = nn.Linear(fusion_in*2, fusion_hidden)
+        self.linear1 = nn.Linear(fusion_in, fusion_hidden)
         self.tanh = nn.Tanh()
         self.linear2 = nn.Linear(fusion_hidden, FUSION_HIDDEN_2)
         self.linear3 = nn.Linear(FUSION_HIDDEN_2, num_answers)
@@ -70,11 +70,11 @@ class CustomFusionModule(nn.Module):
         v = nn.Tanh()(v)
 
         ## Fusion & Classification         
-        x = torch.cat((q, v), dim=1)
+        x = torch.mul(v, q)
         #x = self.fusion([v, q])
         
-        x = torch.squeeze(x, 1)
-       # x = nn.Tanh()(x)
+        #x = torch.squeeze(x, 1)
+        x = nn.Tanh()(x)
         x = self.dropoutF(x)
         x = self.linear1(x)
         x = nn.Tanh()(x)
