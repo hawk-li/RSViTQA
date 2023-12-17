@@ -37,7 +37,7 @@ class VQAModel(nn.Module):
         self.linear_v = nn.Linear(VISUAL_OUT, FUSION_IN)
 
         ## Fusion Layer 
-        self.fusion = fusions.Mutan([FUSION_IN, FUSION_IN], FUSION_IN)
+        #self.fusion = fusions.Mutan([FUSION_IN, FUSION_IN], FUSION_IN)
         
         ## Classification layers
         self.linear_classif1 = nn.Linear(FUSION_IN, FUSION_HIDDEN)

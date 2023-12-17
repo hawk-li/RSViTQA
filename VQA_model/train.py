@@ -29,7 +29,7 @@ from models import model
 
 def vqa_collate_fn(batch):
     # Separate the list of tuples into individual lists
-    questions, answers, images, question_types, _ = zip(*batch)
+    questions, answers, images, question_types = zip(*batch)
 
     # Convert tuples to appropriate tensor batches
     questions_batch = torch.stack(questions)
@@ -164,7 +164,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                 if countQuestionType[type_str] > 0:
                     accPerQuestiontype_tmp = rightAnswerByQuestionType[type_str] * 1.0 / countQuestionType[type_str]
                     accPerQuestionType[type_str].append(accPerQuestiontype_tmp)
-                    wandb.log({type_str: accPerQuestiontype_tmp})
+                    wandb.log({"epoch": epoch, type_str: accPerQuestiontype_tmp})
                     print(f"{type_str}: {accPerQuestiontype_tmp}")
                 numQuestions += countQuestionType[type_str]
                 numRightQuestions += rightAnswerByQuestionType[type_str]
@@ -199,11 +199,11 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
         "OA-epochs": sum(OA) / len(OA),
         "AA-epochs": sum(AA) / len(AA),
         "OA-max": {
-            "epoch": np.argmax(OA),
+            "epoch": int(np.argmax(OA)),
             "value": np.max(OA)
         },
         "AA-max": {
-            "epoch": np.argmax(AA),
+            "epoch": int(np.argmax(AA)),
             "value": np.max(AA)
         },
         "start_time": start_time.strftime("%Y-%m-%d_%H:%M:%S"),

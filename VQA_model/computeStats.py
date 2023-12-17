@@ -137,10 +137,11 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
                     temp2 = int(answers[i])
                 except ValueError:
                     continue
-                count_preds.append(int(preds[i]))
-                count_answers.append(int(answers[i]))
-                count_absoulte_error.append(abs(int(preds[i]) - int(answers[i])))
-                count_mean_squared_error.append((int(preds[i]) - int(answers[i]))**2)
+                if int(preds[i]) >= 2 and int(preds[i]) <= 20 and int(answers[i]) >= 2 and int(answers[i]) <= 20:
+                    count_preds.append(int(preds[i]))
+                    count_answers.append(int(answers[i]))
+                    count_absoulte_error.append(abs(int(preds[i]) - int(answers[i])))
+                    count_mean_squared_error.append((int(preds[i]) - int(answers[i]))**2)
 
 
 
@@ -181,6 +182,8 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
 
     print(f"MAE: {np.mean(count_absoulte_error)}")
     print(f"MSE: {np.mean(count_mean_squared_error)}")
+    print(f"Average count: {np.mean(count_preds)}")
+    print(f"Average answer: {np.mean(count_answers)}")
 
     # second heatmap with not normalized confusion matrix
     plt.figure(figsize=(24,20))
