@@ -137,11 +137,11 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
                     temp2 = int(answers[i])
                 except ValueError:
                     continue
-                if int(preds[i]) >= 2 and int(preds[i]) <= 20 and int(answers[i]) >= 2 and int(answers[i]) <= 20:
-                    count_preds.append(int(preds[i]))
-                    count_answers.append(int(answers[i]))
-                    count_absoulte_error.append(abs(int(preds[i]) - int(answers[i])))
-                    count_mean_squared_error.append((int(preds[i]) - int(answers[i]))**2)
+                #if int(preds[i]) >= 2 and int(preds[i]) <= 20 and int(answers[i]) >= 2 and int(answers[i]) <= 20:
+                count_preds.append(int(preds[i]))
+                count_answers.append(int(answers[i]))
+                count_absoulte_error.append(abs(int(preds[i]) - int(answers[i])))
+                count_mean_squared_error.append((int(preds[i]) - int(answers[i]))**2)
 
 
 
@@ -202,6 +202,39 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
     plt.ylabel('Ground Truth')
     plt.title('Confusion Matrix (Log Scale)')
     plt.savefig('confusion_matrix_' + experiment.split('/')[0] + '_log.png', dpi=300, bbox_inches='tight')
+
+    # Plotting individual distributions
+    plt.figure(figsize=(12, 6))
+
+    # Plot for 'answers'
+    plt.subplot(1, 2, 1)
+    plt.hist(count_answers, bins=range(0, 55), alpha=0.7, color='blue')
+    plt.title('Ground Truth Distribution')
+    plt.xlabel('Counts')
+    plt.ylabel('Frequency')
+
+    # Plot for 'preds'
+    plt.subplot(1, 2, 2)
+    plt.hist(count_preds, bins=range(2, 55), alpha=0.7, color='green')
+    plt.title('Predictions Distribution')
+    plt.xlabel('Counts')
+    plt.ylabel('Frequency')
+
+    plt.tight_layout()
+    plt.savefig('individual_distributions_' + experiment.split('/')[0] + '.png', dpi=300, bbox_inches='tight')
+    plt.show()
+
+    # Plotting overlapping distributions
+    plt.figure(figsize=(6, 6))
+    plt.hist(count_answers, bins=range(0, 55), alpha=0.5, label='Ground Truth', color='blue')
+    plt.hist(count_preds, bins=range(0, 55), alpha=0.5, label='Predictions', color='green')
+    plt.title('Overlapping Distributions')
+    plt.xlabel('Counts')
+    plt.ylabel('Frequency')
+    plt.ylim(0, 40000)
+    plt.legend()
+    plt.savefig('overlapping_distributions_' + experiment.split('/')[0] + '.png', dpi=300, bbox_inches='tight')
+    plt.show()
 
     
     return Accuracies, confusionMatrix
