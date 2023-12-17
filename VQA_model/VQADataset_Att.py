@@ -54,4 +54,4 @@ class VQADataset(Dataset):
         # Load the image associated with this Q/A pair
         image = torch.load(os.path.join(self.visual_path, f"{image_id}.pt"))
 
-        return question, answer, image, question_type_str #, question_str, image_id
+        return question, answer, image, question_type_idx, question_type_str #, question_str, image_id
