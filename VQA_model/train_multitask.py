@@ -25,25 +25,50 @@ import wandb
 from models import model_vit as model
 from models import multitask_attention as multitask
 
-def vqa_collate_fn(batch):
+import VQADataset_FE as VQALoader
+from transformers import AutoTokenizer
+from functools import partial
+
+def vqa_collate_fn(batch, tokenizer):
     # Separate the list of tuples into individual lists
     questions, answers, images, question_types, question_types_str = zip(*batch)
 
-    # Convert tuples to appropriate tensor batches
-    questions_batch = torch.stack(questions)
-    answers_batch = torch.stack(answers)  
+    # Tokenize each question
+    questions_encoded = [tokenizer.encode_plus(question, pad_to_multiple_of=60, add_special_tokens=True, return_attention_mask=True, padding=True, return_tensors="pt") for question in questions]
+
+    # Convert list of tokenized outputs to a single dictionary
+    input_ids = torch.cat([qe["input_ids"] for qe in questions_encoded], dim=0)
+    attention_masks = torch.cat([qe["attention_mask"] for qe in questions_encoded], dim=0)
+
+    # Token type IDs if necessary
+    if 'token_type_ids' in questions_encoded[0]:
+        token_type_ids = torch.cat([qe["token_type_ids"] for qe in questions_encoded], dim=0)
+    else:
+        token_type_ids = None
+
+    # Combine into a single dictionary
+    questions_batch = {
+        'input_ids': input_ids,
+        'attention_mask': attention_masks
+    }
+    if token_type_ids is not None:
+        questions_batch['token_type_ids'] = token_type_ids
+
+    # Convert answers, images, and question types to tensors
+    answers_batch = torch.stack([torch.tensor(answer) for answer in answers]) 
     images_batch = torch.stack(images)  
     question_types_batch = torch.tensor(question_types)
-    # For question_types, you can choose whether to convert to tensor or leave as a list
 
     return questions_batch, answers_batch, images_batch, question_types_batch, question_types_str
 
 def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, lr_fc, experiment_name, wandb_args, num_workers=4):
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, persistent_workers=True, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
-    validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
+    # Initialize the tokenizer
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, persistent_workers=True, num_workers=num_workers, pin_memory=True, collate_fn=partial(vqa_collate_fn, tokenizer=tokenizer))
+    validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=num_workers+1, pin_memory=True, collate_fn=partial(vqa_collate_fn, tokenizer=tokenizer))
     
     
-    #optimizer = torch.optim.Adam(model.shared_parameters(), lr=learning_rate)
+    optimizer = torch.optim.Adam(model.shared_parameters(), lr=learning_rate)
     optimizer_heads = [torch.optim.Adam(classifier.parameters(), lr=lr_fc[i]) for i, classifier in enumerate(model.classifiers, 0)]
     criterion = torch.nn.CrossEntropyLoss()
     schedulers = [torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_head, patience=3, verbose=True, mode="max") for optimizer_head in optimizer_heads]
@@ -94,10 +119,10 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
         for i, data in progress_bar:
             question, answer, image, question_type, _ = data
 
-            question = question.to("cuda")
+            question = {key: value.to("cuda") for key, value in question.items()}
             answer = answer.to("cuda")
             image = image.to("cuda")
-            answer = answer.squeeze(1)
+            #answer = answer.squeeze(1)
             question_type = question_type.to("cuda")
 
             pred = model(image, question, question_type)
@@ -152,10 +177,9 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                         wandb.log({"epoch": epoch, "auxiliary_loss": auxiliary_loss_qt})
 
                     # Combine primary and auxiliary losses
-                    loss_qt #*= 0.8
-                    #loss_qt += auxiliary_loss_qt * 0.2
+                    #loss_qt = loss_qt * 0.8 + auxiliary_loss_qt * 0.2
                 
-                task_specific_losses.append(loss_qt) #* normalized_weights[qt])
+                task_specific_losses.append(loss_qt* normalized_weights[qt])
                 if i % log_interval == 0:
                     wandb.log({"epoch": epoch, f"loss_{qt}": loss_qt})
             
@@ -163,24 +187,24 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             loss_total = sum(task_specific_losses)
 
             # Zero the gradients for the shared and task-specific parameters
-            #optimizer.zero_grad()
+            optimizer.zero_grad()
             for optimizer_head in optimizer_heads:
                 optimizer_head.zero_grad()
 
             # Backpropagate the total loss
-            loss.backward()
+            loss_total.backward()
 
             
             for optimizer_head in optimizer_heads:
                 optimizer_head.step()
             # Now, update all parameters
-            #optimizer.step()
+            optimizer.step()
             if i % log_interval == 0:
                 wandb.log({"epoch": epoch, "loss": loss})
                 wandb.log({"epoch": epoch, "loss_total": loss_total})
 
             # Update running loss and display it in the progress bar
-            current_loss = loss.item() * question.size(0)
+            current_loss = loss.item() * image.size(0)
             runningLoss += current_loss
             progress_bar.set_postfix({'training_loss': '{:.6f}'.format(current_loss / len(data))})
         
@@ -204,15 +228,15 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             for i, data in progress_bar:
                 question, answer, image, question_type, question_type_str = data
 
-                question = question.to("cuda")
+                question = {key: value.to("cuda") for key, value in question.items()}
                 answer = answer.to("cuda")
                 image = image.to("cuda")
+                #answer = answer.squeeze(1)
                 question_type = question_type.to("cuda")
-                answer = answer.squeeze(1)  # Removing an extraneous dimension from the answers
 
                 pred = model(image, question, question_type)
                 loss = criterion(pred, answer)
-                runningLoss += loss.item() * question.size(0)  # Accumulating the loss
+                runningLoss += loss.item() * image.size(0)  # Accumulating the loss
 
                 pred = np.argmax(pred.cpu().numpy(), axis=1)  # Getting the index of the max log-probability
                 for j in range(answer.shape[0]):
@@ -226,9 +250,9 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
 
             question_type_to_idx = {
                 "presence": 0,
-                "comp": 0,
-                "area": 1,
-                "count": 2,
+                "comp": 1,
+                "area": 2,
+                "count": 3,
             }
         
             numQuestions = 0
@@ -289,16 +313,16 @@ if __name__ == '__main__':
     torch.multiprocessing.set_start_method('spawn')
     torch.autograd.set_detect_anomaly(True)
     disable_log = False
-    learning_rate = 1e-5
-    learning_rates = [1e-5, 1e-5, 2e-5, 1e-5]
+    learning_rate = 1e-6
+    learning_rates = [1e-5, 1e-5, 1e-5, 1e-5]
     ratio_images_to_use = 1
-    modeltype = 'ViT-Bert-Attention-Multitask-Mutan'
+    modeltype = 'ViT-Bert-Attention-Multitask-HD-FT'
     Dataset = 'HR'
 
     batch_size = 70
     num_epochs = 35
     patch_size = 512   
-    num_workers = 7
+    num_workers = 2
 
     work_dir = os.getcwd()
     data_path = work_dir + '/data'
@@ -307,6 +331,27 @@ if __name__ == '__main__':
     questions_train_path = questions_path + '/train'
     questions_val_path = questions_path + '/val'
     experiment_name = f"{modeltype}_lr_{learning_rate}_batch_size_{batch_size}_run_{datetime.datetime.now().strftime('%m-%d_%H_%M')}"
+
+    work_dir = os.getcwd()
+    data_path = work_dir + '/data'
+    images_path = os.path.join(data_path + '/images/')
+    allquestionsJSON = os.path.join(data_path + '/text/USGSquestions.json')
+    allanswersJSON = os.path.join(data_path + '/text/USGSanswers.json')
+    questionsJSON = os.path.join(data_path + '/text/USGS_split_train_questions.json')
+    questionsvalJSON = os.path.join(data_path + '/text/USGS_split_val_questions.json')
+    answersJSON = os.path.join(data_path + '/text/USGS_split_train_answers.json')
+    answersvalJSON = os.path.join(data_path + '/text/USGS_split_val_answers.json')
+    imagesJSON = os.path.join(data_path + '/text/USGS_split_train_images.json')
+    imagesvalJSON = os.path.join(data_path + '/text/USGS_split_val_images.json')
+
+    IMAGENET_MEAN = [0.485, 0.456, 0.406]
+    IMAGENET_STD = [0.229, 0.224, 0.225]
+    transform = T.Compose([
+        T.ToPILImage(),
+        T.Resize((224, 224)),
+        T.ToTensor(),            
+        T.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+      ])
 
     wandb_args = {
             "learning_rate": learning_rate,
@@ -325,8 +370,8 @@ if __name__ == '__main__':
             "fusion_hidden": 256,
         }
 
-    train_dataset = VQADataset.VQADataset(questions_train_path, images_path)
-    validate_dataset = VQADataset.VQADataset(questions_val_path, images_path) 
+    train_dataset = VQALoader.VQALoader(images_path, imagesJSON, questionsJSON, answersJSON, train=True, ratio_images_to_use=ratio_images_to_use, transform=transform, patch_size = patch_size)
+    validate_dataset = VQALoader.VQALoader(images_path, imagesvalJSON, questionsvalJSON, answersvalJSON, train=False, ratio_images_to_use=ratio_images_to_use, transform=transform, patch_size = patch_size)
     
     RSVQA = multitask.MultiTaskVQAModel()
     train(RSVQA, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, learning_rates, experiment_name, wandb_args, num_workers)

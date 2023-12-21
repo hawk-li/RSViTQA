@@ -164,7 +164,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                 if countQuestionType[type_str] > 0:
                     accPerQuestiontype_tmp = rightAnswerByQuestionType[type_str] * 1.0 / countQuestionType[type_str]
                     accPerQuestionType[type_str].append(accPerQuestiontype_tmp)
-                    wandb.log({type_str: accPerQuestiontype_tmp})
+                    wandb.log({"epoch": epoch, type_str: accPerQuestiontype_tmp})
                     print(f"{type_str}: {accPerQuestiontype_tmp}")
                 numQuestions += countQuestionType[type_str]
                 numRightQuestions += rightAnswerByQuestionType[type_str]
@@ -245,10 +245,10 @@ if __name__ == '__main__':
         ]
 
     
-    modeltype = 'ViT-BERT-Attention-CONCAT'
+    modeltype = 'ViT-BERT-Attention-HADAMARD'
     Dataset = 'HR'
     patch_size = 512   
-    num_workers = 6
+    num_workers = 12
 
 
     for config in train_configs:
@@ -259,7 +259,7 @@ if __name__ == '__main__':
         work_dir = os.getcwd()
         data_path = work_dir + '/data'
         images_path = data_path + '/image_representations_vit_att'
-        questions_path = data_path + '/text_representations_bert_att'
+        questions_path = data_path + '/text_representations_bert'
         questions_train_path = questions_path + '/train'
         questions_val_path = questions_path + '/val'
         experiment_name = f"{modeltype}_lr_{learning_rate}_batch_size_{batch_size}_run_{datetime.datetime.now().strftime('%m-%d_%H_%M')}"

@@ -37,7 +37,7 @@ class VQAModel(nn.Module):
         self.linear_v = nn.Linear(VISUAL_OUT, FUSION_IN)
 
         ## Fusion Layer 
-        self.fusion = fusions.Mutan([FUSION_IN, FUSION_IN], FUSION_IN)
+        #self.fusion = fusions.Mutan([FUSION_IN, FUSION_IN], FUSION_IN)
         
         ## Classification layers
         self.linear_classif1 = nn.Linear(FUSION_IN, FUSION_HIDDEN)
@@ -62,9 +62,9 @@ class VQAModel(nn.Module):
         v = nn.Tanh()(v)
 
         ## Fusion & Classification         
-        #x = torch.mul(v, q)
+        x = torch.mul(v, q)
         #x = torch.cat((v, q), 1)
-        x = self.fusion([v, q])
+        #x = self.fusion([v, q])
         
         #x = torch.squeeze(x, 1)
         x = nn.Tanh()(x)

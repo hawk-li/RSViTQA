@@ -1,6 +1,10 @@
 import torch
 import torch.nn as nn
 from models.attention import SelfAttentionQuestion, CrossAttention, SelfAttentionImage
+from torchvision import models
+
+## Import HuggingFace libraries
+from transformers import BertTokenizer, BertModel
 
 VISUAL_OUT = 768
 QUESTION_OUT = 768
@@ -48,7 +52,7 @@ class CustomFusionModule(nn.Module):
 
         self.dropout = nn.Dropout(DROPOUT_F)
 
-        self.fusion = fusions.Mutan([FUSION_IN, FUSION_IN], FUSION_IN)
+        #self.fusion = fusions.Mutan([FUSION_IN, FUSION_IN], FUSION_IN)
         
         self.linear1 = nn.Linear(fusion_in, fusion_hidden)
         self.tanh = nn.Tanh()
@@ -56,6 +60,7 @@ class CustomFusionModule(nn.Module):
         self.linear3 = nn.Linear(FUSION_HIDDEN_2, num_answers)
 
     def forward(self, input_v, input_q):
+
         ## Dropouts
         input_q = self.dropoutQ(input_q)
         input_v = self.dropoutV(input_v)
@@ -72,8 +77,8 @@ class CustomFusionModule(nn.Module):
         v = nn.Tanh()(v)
 
         ## Fusion & Classification         
-        # x = torch.mul(v, q)
-        x = self.fusion([v, q])
+        x = torch.mul(v, q)
+        #x = self.fusion([v, q])
         
         #x = torch.squeeze(x, 1)
         x = nn.Tanh()(x)
@@ -91,6 +96,13 @@ class CustomFusionModule(nn.Module):
 class MultiTaskVQAModel(nn.Module):
     def __init__(self):
         super(MultiTaskVQAModel, self).__init__()
+
+        # pretrained vit-b
+        self.vit = models.vit_b_16(weights="DEFAULT")
+
+        # pretrained bert
+        self.bert = BertModel.from_pretrained('bert-base-uncased')
+        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
         # Mapping question types to number of unique answers
         question_type_to_num_answers = {
@@ -120,6 +132,20 @@ class MultiTaskVQAModel(nn.Module):
                 yield param
 
     def forward(self, input_v, input_q, question_type):
+
+        input_v = self.vit._process_input(input_v)
+        n = input_v.shape[0]
+
+        # Expand the class token to the full batch
+        batch_class_token = self.vit.class_token.expand(n, -1, -1)
+        input_v = torch.cat([batch_class_token, input_v], dim=1)
+
+        input_v = self.vit.encoder(input_v)
+
+        ## Question Features
+        #input_q = self.tokenizer.encode_plus(input_q, pad_to_multiple_of=35, add_special_tokens=True, return_attention_mask=True, padding=True, return_tensors="pt")
+        input_q = self.bert(**input_q)
+        input_q = input_q.last_hidden_state.squeeze(0)
 
         # Initialize a tensor to hold the final predictions for the entire batch
         batch_size = input_v.size(0)
