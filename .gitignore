@@ -8,6 +8,8 @@
 /output/**
 accuracies_**
 confusion_matrix_**
+individual_**
+overlapping_**
 outputs/**
 wandb/**
 old_output

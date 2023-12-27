@@ -9,7 +9,8 @@
 import textwrap
 import utils.VocabEncoder as VocabEncoder
 import VQADataset_Att as VQADataset
-from models import multitask_attention as model
+from models import multitask_attention as model_multitask
+from models import model as model_single
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
@@ -25,7 +26,7 @@ import torch.utils.data.dataloader as dataloader
 from sklearn.metrics import confusion_matrix
 import seaborn as sns
         
-def get_vocab(dataset):
+def get_vocab():
     work_dir = os.getcwd()
     data_path = work_dir + '/data/text'
     allanswersJSON = os.path.join(data_path, 'USGSanswers.json')
@@ -33,11 +34,13 @@ def get_vocab(dataset):
         
     return encoder_answers.getVocab()
 
-def load_model(experiment, epoch, patch_size=512):
-    weight_file = experiment + '_' + str(epoch) + '.pth'
+def load_model(experiment, type="multitask"):
     work_dir = os.getcwd()
-    path = os.path.join(work_dir, 'outputs', weight_file)
-    network = model.MultiTaskVQAModel().cuda()#input_size = patch_size).cuda()
+    path = os.path.join(work_dir, experiment)
+    if type == "multitask":
+        network = model_multitask.MultiTaskVQAModel().cuda()#input_size = patch_size).cuda()
+    else:
+        network = model_single.VQAModel().cuda()
     state = network.state_dict()
     state.update(torch.load(path))
     network.load_state_dict(state)
@@ -91,19 +94,15 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
 
         for t, i in zip(type_string, range(len(type_string))):
             if t == "count":
+                # check if answer is a number, if not, skip for a fair comparison since multitask model knows the question type
                 try: 
                     temp = int(preds[i])
-                    temp2 = int(answers[i])
                 except ValueError:
                     continue
-                #if int(preds[i]) >= 2 and int(preds[i]) <= 20 and int(answers[i]) >= 2 and int(answers[i]) <= 20:
                 count_preds.append(int(preds[i]))
                 count_answers.append(int(answers[i]))
                 count_absoulte_error.append(abs(int(preds[i]) - int(answers[i])))
                 count_mean_squared_error.append((int(preds[i]) - int(answers[i]))**2)
-
-
-
 
         for j in range(answer.shape[0]):
             countQuestionType[type_str[j]] += 1
@@ -200,30 +199,20 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
 
 if __name__ == '__main__':
     expes = {
-            'HR': ['ViT-Bert-Attention-Multitask_lr_1e-05_batch_size_70_run_12-11_13_04/RSVQA_model_epoch'],
+            'HR': ['ViT-Bert-Attention-Multitask-CONCAT_lr_1e-05_batch_size_70_run_12-23_15_06/RSVQA_model_epoch'],
             #'HRPhili': ['RSVQA_ViT-CLS_RNN_512_100_35_0.00001_HR_2023-30-10/RSVQA_model_epoch'],
     }
     work_dir = os.getcwd()
     data_path = work_dir + '/data'
-
     images_path = os.path.join(data_path, 'image_representations_vit_att')
     text_path = os.path.join(data_path, 'text_representations_bert_att/test')
-    #test_loader = load_dataset(text_path, images_path, batch_size=100)
+
     for dataset in expes.keys():
         acc = []
         mat = []
         for experiment_name in expes[dataset]:
-            if not os.path.isfile('accuracies_' + dataset + '_' + experiment_name + '.npy'):
-                if dataset[-1] == 's':
-                    tmp_acc, tmp_mat = run(experiment_name, dataset[:-1], shuffle=True)
-                else:
-                    model_att = load_model(experiment_name, 23)
-                    tmp_acc, tmp_mat = run(model_att, text_path, images_path, experiment_name, dataset)
-                # np.save('accuracies_' + dataset + '_' + experiment_name, tmp_acc)
-                # np.save('confusion_matrix_' + dataset + '_' + experiment_name, tmp_mat)
-            else:
-                tmp_acc = np.load('accuracies_' + dataset + '_' + experiment_name + '.npy', allow_pickle=True)[()]
-                tmp_mat = np.load('confusion_matrix_' + dataset + '_' + experiment_name + '.npy', allow_pickle=True)[()]
+            model_att = load_model(experiment_name, 23)
+            tmp_acc, tmp_mat = run(model_att, text_path, images_path, experiment_name, dataset)
             acc.append(tmp_acc)
             mat.append(tmp_mat)
             

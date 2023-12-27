@@ -6,7 +6,7 @@ VISUAL_OUT = 768
 QUESTION_OUT = 768
 HIDDEN_DIMENSION_ATTENTION = 512
 HIDDEN_DIMENSION_CROSS = 5000
-FUSION_IN = 800
+FUSION_IN = 1200
 FUSION_HIDDEN = 256
 FUSION_HIDDEN_2 = 64
 DROPOUT_V = 0.5
@@ -50,10 +50,10 @@ class CustomFusionModule(nn.Module):
 
         #self.fusion = fusions.Mutan([FUSION_IN, FUSION_IN], FUSION_IN)
         
-        self.linear1 = nn.Linear(fusion_in, fusion_hidden)
+        self.linear1 = nn.Linear(fusion_in*2, fusion_hidden)
         self.tanh = nn.Tanh()
-        self.linear2 = nn.Linear(fusion_hidden, FUSION_HIDDEN_2)
-        self.linear3 = nn.Linear(FUSION_HIDDEN_2, num_answers)
+        self.linear2 = nn.Linear(fusion_hidden, num_answers)
+        #self.linear3 = nn.Linear(FUSION_HIDDEN_2, num_answers)
 
     def forward(self, input_v, input_q):
         ## Dropouts
@@ -72,19 +72,19 @@ class CustomFusionModule(nn.Module):
         v = nn.Tanh()(v)
 
         ## Fusion & Classification         
-        x = torch.mul(v, q)
+        x = torch.cat((q, v), dim=1)
         #x = self.fusion([v, q])
         
-        #x = torch.squeeze(x, 1)
-        x = nn.Tanh()(x)
+        x = torch.squeeze(x, 1)
+        #x = nn.Tanh()(x)
         x = self.dropoutF(x)
         x = self.linear1(x)
         x = nn.Tanh()(x)
         x = self.dropoutF(x)
         x = self.linear2(x)
-        x = nn.Tanh()(x)
-        x = self.dropoutF(x)
-        x = self.linear3(x)
+        # x = nn.Tanh()(x)
+        # x = self.dropoutF(x)
+        # x = self.linear3(x)
         return x
 
 

@@ -42,7 +42,9 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, persistent_workers=True, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
     validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=num_workers, pin_memory=True, collate_fn=vqa_collate_fn)
     
-    
+    # in the current implementation, we do not have shared parameters, except for the feature extractors (which are not trained)
+    # if we want to share additional parameters, we need to add them to the shared_parameters() function in the model and uncomment the following line
+    # as well as after the prediction step in the training loop
     #optimizer = torch.optim.Adam(model.shared_parameters(), lr=learning_rate)
     optimizer_heads = [torch.optim.Adam(classifier.parameters(), lr=lr_fc[i]) for i, classifier in enumerate(model.classifiers, 0)]
     criterion = torch.nn.CrossEntropyLoss()
@@ -152,10 +154,9 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                         wandb.log({"epoch": epoch, "auxiliary_loss": auxiliary_loss_qt})
 
                     # Combine primary and auxiliary losses
-                    loss_qt #*= 0.8
-                    #loss_qt += auxiliary_loss_qt * 0.2
+                    #loss_qt * 0.8 += auxiliary_loss_qt * 0.2
                 
-                task_specific_losses.append(loss_qt) #* normalized_weights[qt])
+                task_specific_losses.append(loss_qt * normalized_weights[qt])
                 if i % log_interval == 0:
                     wandb.log({"epoch": epoch, f"loss_{qt}": loss_qt})
             
@@ -168,7 +169,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                 optimizer_head.zero_grad()
 
             # Backpropagate the total loss
-            loss.backward()
+            loss_total.backward()
 
             
             for optimizer_head in optimizer_heads:
@@ -198,7 +199,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             countQuestionType = {'presence': 0, 'count': 0, 'comp': 0, 'area': 0}
             rightAnswerByQuestionType = {'presence': 0, 'count': 0, 'comp': 0, 'area': 0}
 
-            # Implementing tqdm for the validation loop, similar to the training loop
+            # tqdm for the validation loop
             progress_bar = tqdm(enumerate(validate_loader, 0), total=len(validate_loader), desc="Validating", position=0, leave=False)
 
             for i, data in progress_bar:
@@ -208,7 +209,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
                 answer = answer.to("cuda")
                 image = image.to("cuda")
                 question_type = question_type.to("cuda")
-                answer = answer.squeeze(1)  # Removing an extraneous dimension from the answers
+                answer = answer.squeeze(1)  # Removing an extraneous dimension from the answers (added during saving)
 
                 pred = model(image, question, question_type)
                 loss = criterion(pred, answer)
@@ -226,9 +227,9 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
 
             question_type_to_idx = {
                 "presence": 0,
-                "comp": 0,
-                "area": 1,
-                "count": 2,
+                "comp": 1,
+                "area": 2,
+                "count": 3,
             }
         
             numQuestions = 0
@@ -263,17 +264,11 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
         "total_time_in_hours": (epoch_end_time - epoch_start_time).total_seconds() / 3600,
         }
         experiment_log["epoch_data"].append(epoch_info)
-        # Save the JSON log file after each epoch
-        epoch_log_file = output_dir / f"epoch_{epoch}_log.json"
-        with open(epoch_log_file, 'w') as outfile:
-            json.dump(epoch_info, outfile, indent=4)
     end_time = datetime.datetime.now()
     # Calculate and save final results or other relevant info
     experiment_log["final_results"] = {
         "average_train_loss": sum(trainLoss) / len(trainLoss),
         "average_val_loss": sum(valLoss) / len(valLoss),
-        "OA-epochs": sum(OA) / len(OA),
-        "AA-epochs": sum(AA) / len(AA),
         "start_time": start_time.strftime("%Y-%m-%d_%H:%M:%S"),
         "end_time": end_time.strftime("%Y-%m-%d_%H:%M:%S"),
         "total_time_in_hours": (end_time - start_time).total_seconds() / 3600
@@ -292,18 +287,18 @@ if __name__ == '__main__':
     learning_rate = 1e-5
     learning_rates = [1e-5, 1e-5, 2e-5, 1e-5]
     ratio_images_to_use = 1
-    modeltype = 'ViT-Bert-Attention-Multitask-Mutan'
+    modeltype = 'ViT-Bert-Attention-Multitask-CONCAT-2HD'
     Dataset = 'HR'
 
     batch_size = 70
-    num_epochs = 35
+    num_epochs = 25
     patch_size = 512   
     num_workers = 7
 
     work_dir = os.getcwd()
     data_path = work_dir + '/data'
     images_path = data_path + '/image_representations_vit_att'
-    questions_path = data_path + '/text_representations_bert_att'
+    questions_path = data_path + '/text_representations_bert_att' 
     questions_train_path = questions_path + '/train'
     questions_val_path = questions_path + '/val'
     experiment_name = f"{modeltype}_lr_{learning_rate}_batch_size_{batch_size}_run_{datetime.datetime.now().strftime('%m-%d_%H_%M')}"
@@ -317,18 +312,21 @@ if __name__ == '__main__':
             "batch_size": batch_size,
             "num_epochs": num_epochs,
             "patch_size": patch_size,
-            "num_workers": num_workers,
+            "num_workers": num_workers,   
             "log_interval": 100,
             "experiment_name": experiment_name,
             "focus_increase_factors":  {}, # Increase the weight of the a question type by x
-            "fusion_in": 600,
+            "fusion_in": 1200,
             "fusion_hidden": 256,
+            "fusion_hidden_2": 128,
         }
 
     train_dataset = VQADataset.VQADataset(questions_train_path, images_path)
     validate_dataset = VQADataset.VQADataset(questions_val_path, images_path) 
     
-    RSVQA = multitask.MultiTaskVQAModel()
-    train(RSVQA, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, learning_rates, experiment_name, wandb_args, num_workers)
+    # load from checkpoint
+    mod = multitask.MultiTaskVQAModel().cuda()
+    mod.load_state_dict(torch.load('outputs/ViT-Bert-Attention-Multitask-CONCAT-2HD_lr_1e-05_batch_size_70_run_12-24_15_12/RSVQA_model_epoch_9.pth'))
+    train(mod, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, learning_rates, experiment_name, wandb_args, num_workers)
     
     
