@@ -18,9 +18,9 @@ from block import fusions
 # used in dataset, only for reference
 # question_type_to_idx = {
 #     "presence": 0,
-#     "comp": 0,
-#     "area": 1,
-#     "count": 2,
+#     "comp": 1,
+#     "area": 2,
+#     "count": 3,
 # }
 
 
@@ -48,12 +48,10 @@ class CustomFusionModule(nn.Module):
 
         self.dropout = nn.Dropout(DROPOUT_F)
 
-        #self.fusion = fusions.Mutan([FUSION_IN, FUSION_IN], FUSION_IN)
+        self.fusion = fusions.Mutan([FUSION_IN, FUSION_IN], FUSION_IN)
         
-        self.linear1 = nn.Linear(fusion_in*2, fusion_hidden)
-        self.tanh = nn.Tanh()
+        self.linear1 = nn.Linear(fusion_in, fusion_hidden)
         self.linear2 = nn.Linear(fusion_hidden, num_answers)
-        #self.linear3 = nn.Linear(FUSION_HIDDEN_2, num_answers)
 
     def forward(self, input_v, input_q):
         ## Dropouts
@@ -72,19 +70,16 @@ class CustomFusionModule(nn.Module):
         v = nn.Tanh()(v)
 
         ## Fusion & Classification         
-        x = torch.cat((q, v), dim=1)
-        #x = self.fusion([v, q])
+        #x = torch.cat((q, v), dim=1)
+        x = self.fusion([v, q])
         
-        x = torch.squeeze(x, 1)
+        #x = torch.squeeze(x, 1)
         #x = nn.Tanh()(x)
         x = self.dropoutF(x)
         x = self.linear1(x)
         x = nn.Tanh()(x)
         x = self.dropoutF(x)
         x = self.linear2(x)
-        # x = nn.Tanh()(x)
-        # x = self.dropoutF(x)
-        # x = self.linear3(x)
         return x
 
 

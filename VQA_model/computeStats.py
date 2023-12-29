@@ -8,7 +8,7 @@
 
 import textwrap
 import utils.VocabEncoder as VocabEncoder
-import VQADataset_Att as VQADataset
+import datasets.VQADataset_Att as VQADataset
 from models import multitask_attention as model_multitask
 from models import model as model_single
 import matplotlib.pyplot as plt
@@ -66,7 +66,7 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
     print ('---' + experiment + '---')
     countQuestionType = {'area': 0, 'presence': 0, 'count': 0, 'comp': 0}
     rightAnswerByQuestionType = {'area': 0, 'presence': 0, 'count': 0, 'comp': 0}
-    encoder_answers = get_vocab(dataset)
+    encoder_answers = get_vocab()
     confusionMatrix = np.zeros((len(encoder_answers), len(encoder_answers)))
     progress_bar = tqdm(enumerate(test_loader, 0), total=len(test_loader))
     count_preds = []
@@ -191,7 +191,7 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
     plt.ylabel('Frequency')
     plt.ylim(0, 40000)
     plt.legend()
-    plt.savefig('overlapping_distributions_' + experiment.split('/')[0] + '.png', dpi=300, bbox_inches='tight')
+    plt.savefig('overlapping_distributions_' + experiment.split('/')[1] + '.png', dpi=300, bbox_inches='tight')
     plt.show()
 
     
@@ -199,19 +199,19 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
 
 if __name__ == '__main__':
     expes = {
-            'HR': ['ViT-Bert-Attention-Multitask-CONCAT_lr_1e-05_batch_size_70_run_12-23_15_06/RSVQA_model_epoch'],
+            'HR': ['outputs/ViT-Bert-Attention-Multitask-MUTAN_lr_1e-05_batch_size_70_run_12-28_01_13/RSVQA_model_epoch_29.pth'],
             #'HRPhili': ['RSVQA_ViT-CLS_RNN_512_100_35_0.00001_HR_2023-30-10/RSVQA_model_epoch'],
     }
     work_dir = os.getcwd()
     data_path = work_dir + '/data'
     images_path = os.path.join(data_path, 'image_representations_vit_att')
-    text_path = os.path.join(data_path, 'text_representations_bert_att/test')
+    text_path = os.path.join(data_path, 'text_representations_bert/test_q_str')
 
     for dataset in expes.keys():
         acc = []
         mat = []
         for experiment_name in expes[dataset]:
-            model_att = load_model(experiment_name, 23)
+            model_att = load_model(experiment_name, type="multitask")
             tmp_acc, tmp_mat = run(model_att, text_path, images_path, experiment_name, dataset)
             acc.append(tmp_acc)
             mat.append(tmp_mat)

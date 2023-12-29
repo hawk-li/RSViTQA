@@ -12,7 +12,7 @@ from tqdm import tqdm
 matplotlib.use('Agg')
 
 
-import VQADataset_Att as VQADataset
+import datasets.VQADataset_Att as VQADataset
 import torchvision.transforms as T
 import torch
 import numpy as np
@@ -287,18 +287,18 @@ if __name__ == '__main__':
     learning_rate = 1e-5
     learning_rates = [1e-5, 1e-5, 2e-5, 1e-5]
     ratio_images_to_use = 1
-    modeltype = 'ViT-Bert-Attention-Multitask-CONCAT-2HD'
+    modeltype = 'ViT-Bert-Attention-Multitask-MUTAN'
     Dataset = 'HR'
 
     batch_size = 70
-    num_epochs = 25
+    num_epochs = 35
     patch_size = 512   
-    num_workers = 7
+    num_workers = 12
 
     work_dir = os.getcwd()
     data_path = work_dir + '/data'
     images_path = data_path + '/image_representations_vit_att'
-    questions_path = data_path + '/text_representations_bert_att' 
+    questions_path = data_path + '/text_representations_bert' 
     questions_train_path = questions_path + '/train'
     questions_val_path = questions_path + '/val'
     experiment_name = f"{modeltype}_lr_{learning_rate}_batch_size_{batch_size}_run_{datetime.datetime.now().strftime('%m-%d_%H_%M')}"
@@ -326,7 +326,6 @@ if __name__ == '__main__':
     
     # load from checkpoint
     mod = multitask.MultiTaskVQAModel().cuda()
-    mod.load_state_dict(torch.load('outputs/ViT-Bert-Attention-Multitask-CONCAT-2HD_lr_1e-05_batch_size_70_run_12-24_15_12/RSVQA_model_epoch_9.pth'))
     train(mod, train_dataset, validate_dataset, batch_size, num_epochs, learning_rate, learning_rates, experiment_name, wandb_args, num_workers)
     
     

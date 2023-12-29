@@ -12,7 +12,7 @@ from tqdm import tqdm
 matplotlib.use('Agg')
 
 
-import VQADataset_Att as VQADataset
+import datasets.VQADataset_Att as VQADataset
 import torchvision.transforms as T
 import torch
 import numpy as np
@@ -23,13 +23,12 @@ import datetime
 
 import wandb
 from models import model_vit 
-from models import model_attention
 from models import model_vit_bert
 from models import model
 
 def vqa_collate_fn(batch):
     # Separate the list of tuples into individual lists
-    questions, answers, images, question_types = zip(*batch)
+    questions, answers, images, question_types_idx, question_types = zip(*batch)
 
     # Convert tuples to appropriate tensor batches
     questions_batch = torch.stack(questions)
@@ -45,7 +44,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
     
     model = model.to("cuda")
     
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)#, weight_decay=0.0001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     criterion = torch.nn.CrossEntropyLoss()
 
     # Create a directory for the experiment outputs
@@ -102,9 +101,8 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             answer = answer.squeeze(1)
 
             pred = model(image, question)
-            # pred_magnitude = torch.abs(pred)
-            # pred = pred_magnitude * torch.sign(pred)
             loss = criterion(pred, answer)
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -114,7 +112,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             current_loss = loss.item()
             runningLoss += current_loss
 
-            # Here's how you update the progress bar with additional info
+            # update the progress bar with additional info
             progress_bar.set_postfix({'training_loss': '{:.6f}'.format(current_loss)})
         
             
@@ -131,11 +129,11 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             countQuestionType = {'presence': 0, 'count': 0, 'comp': 0, 'area': 0}
             rightAnswerByQuestionType = {'presence': 0, 'count': 0, 'comp': 0, 'area': 0}
 
-            # Implementing tqdm for the validation loop, similar to the training loop
+            # tqdm for the validation loop, similar to the training loop
             progress_bar = tqdm(enumerate(validate_loader, 0), total=len(validate_loader), desc="Validating", position=0, leave=False)
 
             for i, data in progress_bar:
-                question, answer, image, type_str = data
+                question, answer, image, type_idx, type_str = data
 
                 question = question.to("cuda")
                 answer = answer.to("cuda")
