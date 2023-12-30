@@ -4,22 +4,16 @@
 @author: sylvain
 """
 
-# Calcul des statistiques sur un jeu de test
+# Used to compute the accuracy of the model on the test set
 
-import textwrap
 import utils.VocabEncoder as VocabEncoder
 import datasets.VQADataset_Att as VQADataset
 from models import multitask_attention as model_multitask
 from models import model as model_single
 import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
-
 import torch
-import torchvision.transforms as T
-from torch.autograd import Variable
 from skimage import io
 import numpy as np
-import pickle
 import os
 from tqdm import tqdm
 import torch.utils.data.dataloader as dataloader
@@ -38,7 +32,7 @@ def load_model(experiment, type="multitask"):
     work_dir = os.getcwd()
     path = os.path.join(work_dir, experiment)
     if type == "multitask":
-        network = model_multitask.MultiTaskVQAModel().cuda()#input_size = patch_size).cuda()
+        network = model_multitask.MultiTaskVQAModel().cuda()
     else:
         network = model_single.VQAModel().cuda()
     state = network.state_dict()
@@ -82,7 +76,7 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
         question = question.to("cuda")
         image = image.to("cuda")
 
-        pred = network(image,question, type_idx)#, type_idx)
+        pred = network(image,question, type_idx)
         
         answer = answer.cpu().numpy()
         pred = np.argmax(pred.cpu().detach().numpy(), axis=1)
@@ -151,7 +145,6 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
     plt.title('Confusion Matrix')
     plt.savefig('confusion_matrix_' + experiment.split('/')[0] + '_abs.png', dpi=300, bbox_inches='tight')
 
-
     cm_log_scale = np.log(cm + 1)  # Adding 1 to avoid log(0)
 
     plt.figure(figsize=(24,20))
@@ -200,7 +193,6 @@ def run(network, text_path, images_path, experiment, dataset, num_batches=-1, sa
 if __name__ == '__main__':
     expes = {
             'HR': ['outputs/ViT-Bert-Attention-Multitask-MUTAN_lr_1e-05_batch_size_70_run_12-28_01_13/RSVQA_model_epoch_29.pth'],
-            #'HRPhili': ['RSVQA_ViT-CLS_RNN_512_100_35_0.00001_HR_2023-30-10/RSVQA_model_epoch'],
     }
     work_dir = os.getcwd()
     data_path = work_dir + '/data'
