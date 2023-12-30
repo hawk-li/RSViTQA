@@ -160,7 +160,7 @@ class VQALoader(Dataset):
                         else:
                             answer_str = "0m2"
             
-                self.images_questions_answers[index] = [question_str, self.words[answer_str], i, type_str]
+                self.images_questions_answers[index] = [question_str, self.words[answer_str], image, type_str]
                 index += 1
     def __len__(self):
         return self.len

@@ -52,7 +52,7 @@ class CustomFusionModule(nn.Module):
 
         self.dropout = nn.Dropout(DROPOUT_F)
 
-        #self.fusion = fusions.Mutan([FUSION_IN, FUSION_IN], FUSION_IN)
+        self.fusion = fusions.Mutan([FUSION_IN, FUSION_IN], FUSION_IN)
         
         self.linear1 = nn.Linear(fusion_in, fusion_hidden)
         self.tanh = nn.Tanh()
@@ -76,12 +76,17 @@ class CustomFusionModule(nn.Module):
         v = self.linear_v(v)
         v = nn.Tanh()(v)
 
-        ## Fusion & Classification         
-        x = torch.mul(v, q)
-        #x = self.fusion([v, q])
+        ## Fusion & Classification 
+        # when using multiplication        
+        #x = torch.mul(v, q)
+        #x = nn.Tanh()(x)
+        # when using mutan
+        x = self.fusion([v, q])
         
+        # when using concatenation
+        #x = torch.cat((v, q), dim=1)
         #x = torch.squeeze(x, 1)
-        x = nn.Tanh()(x)
+        
         x = self.dropoutF(x)
         x = self.linear1(x)
         x = nn.Tanh()(x)
@@ -102,7 +107,6 @@ class MultiTaskVQAModel(nn.Module):
 
         # pretrained bert
         self.bert = BertModel.from_pretrained('bert-base-uncased')
-        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
         # Mapping question types to number of unique answers
         question_type_to_num_answers = {

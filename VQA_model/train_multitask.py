@@ -67,7 +67,7 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, persistent_workers=True, num_workers=num_workers, pin_memory=True, collate_fn=partial(vqa_collate_fn, tokenizer=tokenizer))
     validate_loader = torch.utils.data.DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, persistent_workers=True, num_workers=num_workers+1, pin_memory=True, collate_fn=partial(vqa_collate_fn, tokenizer=tokenizer))
     
-    
+    # optimizer, criterion, and scheduler
     optimizer = torch.optim.Adam(model.shared_parameters(), lr=learning_rate)
     optimizer_heads = [torch.optim.Adam(classifier.parameters(), lr=lr_fc[i]) for i, classifier in enumerate(model.classifiers, 0)]
     criterion = torch.nn.CrossEntropyLoss()
@@ -287,10 +287,6 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
         "total_time_in_hours": (epoch_end_time - epoch_start_time).total_seconds() / 3600,
         }
         experiment_log["epoch_data"].append(epoch_info)
-        # Save the JSON log file after each epoch
-        epoch_log_file = output_dir / f"epoch_{epoch}_log.json"
-        with open(epoch_log_file, 'w') as outfile:
-            json.dump(epoch_info, outfile, indent=4)
     end_time = datetime.datetime.now()
     # Calculate and save final results or other relevant info
     experiment_log["final_results"] = {
@@ -314,7 +310,7 @@ if __name__ == '__main__':
     torch.autograd.set_detect_anomaly(True)
     disable_log = False
     learning_rate = 1e-6
-    learning_rates = [1e-5, 1e-5, 1e-5, 1e-5]
+    learning_rates = [1e-5, 1e-5, 2e-5, 1e-5]
     ratio_images_to_use = 1
     modeltype = 'ViT-Bert-Attention-Multitask-HD-FT'
     Dataset = 'HR'
@@ -322,14 +318,8 @@ if __name__ == '__main__':
     batch_size = 70
     num_epochs = 35
     patch_size = 512   
-    num_workers = 2
+    num_workers = 8
 
-    work_dir = os.getcwd()
-    data_path = work_dir + '/data'
-    images_path = data_path + '/image_representations_vit_att'
-    questions_path = data_path + '/text_representations_bert_att'
-    questions_train_path = questions_path + '/train'
-    questions_val_path = questions_path + '/val'
     experiment_name = f"{modeltype}_lr_{learning_rate}_batch_size_{batch_size}_run_{datetime.datetime.now().strftime('%m-%d_%H_%M')}"
 
     work_dir = os.getcwd()
@@ -366,8 +356,6 @@ if __name__ == '__main__':
             "log_interval": 100,
             "experiment_name": experiment_name,
             "focus_increase_factors":  {}, # Increase the weight of the a question type by x
-            "fusion_in": 600,
-            "fusion_hidden": 256,
         }
 
     train_dataset = VQALoader.VQALoader(images_path, imagesJSON, questionsJSON, answersJSON, train=True, ratio_images_to_use=ratio_images_to_use, transform=transform, patch_size = patch_size)
