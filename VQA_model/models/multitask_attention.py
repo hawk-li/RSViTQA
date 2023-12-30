@@ -2,17 +2,6 @@ import torch
 import torch.nn as nn
 from models.attention import SelfAttentionQuestion, CrossAttention, SelfAttentionImage
 
-VISUAL_OUT = 768
-QUESTION_OUT = 768
-HIDDEN_DIMENSION_ATTENTION = 512
-HIDDEN_DIMENSION_CROSS = 5000
-FUSION_IN = 1200
-FUSION_HIDDEN = 256
-FUSION_HIDDEN_2 = 64
-DROPOUT_V = 0.5
-DROPOUT_Q = 0.5
-DROPOUT_F = 0.5
-
 from block import fusions
 
 # used in dataset, only for reference
@@ -31,26 +20,38 @@ from block import fusions
 #         }
 
 class CustomFusionModule(nn.Module):
-    def __init__(self, fusion_in, fusion_hidden, num_answers):
+    def __init__(self, 
+                visual_out=768, 
+                question_out=768, 
+                fusion_in=1200, 
+                fusion_hidden=256, 
+                num_answers=2, 
+                dropout_v=0.5, 
+                dropout_q=0.5, 
+                dropout_f=0.5, 
+                use_attention=True,
+                hidden_dimension_attention=512,
+                hidden_dimension_cross=5000):
         super(CustomFusionModule, self).__init__()
 
-        self.dropoutV = nn.Dropout(DROPOUT_V)
-        self.dropoutQ = nn.Dropout(DROPOUT_Q)
-        self.dropoutF = nn.Dropout(DROPOUT_F)
+        self.dropoutV = nn.Dropout(dropout_v)
+        self.dropoutQ = nn.Dropout(dropout_q)
+        self.dropoutF = nn.Dropout(dropout_f)
 
         ## Attention Modules
-        self.selfattention_q = SelfAttentionQuestion(QUESTION_OUT, HIDDEN_DIMENSION_ATTENTION, 1)
-        self.crossattention = CrossAttention(HIDDEN_DIMENSION_CROSS, QUESTION_OUT, VISUAL_OUT)
-        self.selfattention_v = SelfAttentionImage(HIDDEN_DIMENSION_CROSS, HIDDEN_DIMENSION_ATTENTION, 1)
+        if use_attention:
+            self.selfattention_q = SelfAttentionQuestion(question_out, hidden_dimension_attention, 1)
+            self.crossattention = CrossAttention(hidden_dimension_cross, question_out, visual_out)
+            self.selfattention_v = SelfAttentionImage(hidden_dimension_cross, hidden_dimension_attention, 1)
         
-        self.linear_q = nn.Linear(QUESTION_OUT, FUSION_IN)
-        self.linear_v = nn.Linear(VISUAL_OUT, FUSION_IN)
+        self.linear_q = nn.Linear(question_out, fusion_in)
+        self.linear_v = nn.Linear(visual_out, fusion_in)
 
-        self.dropout = nn.Dropout(DROPOUT_F)
+        self.dropout = nn.Dropout(dropout_f)
 
-        self.fusion = fusions.Mutan([FUSION_IN, FUSION_IN], FUSION_IN)
+        self.fusion = fusions.Mutan([fusion_in, fusion_in], fusion_in)
         
-        self.linear1 = nn.Linear(fusion_in, fusion_hidden)
+        self.linear1 = nn.Linear(fusion_in, fusion_hidden) # for concat, FUSION_IN*2
         self.linear2 = nn.Linear(fusion_hidden, num_answers)
 
     def forward(self, input_v, input_q):
@@ -59,9 +60,10 @@ class CustomFusionModule(nn.Module):
         input_v = self.dropoutV(input_v)
         
         ## Self-Attention for Question
-        q = self.selfattention_q(input_q)
-        c = self.crossattention(q, input_v)
-        v = self.selfattention_v(c, input_v)
+        if hasattr(self, 'selfattention_q'):
+            q = self.selfattention_q(input_q)
+            c = self.crossattention(q, input_v)
+            v = self.selfattention_v(c, input_v)
     
         ## Prepare fusion
         q = self.linear_q(q)
@@ -69,11 +71,19 @@ class CustomFusionModule(nn.Module):
         v = self.linear_v(v)
         v = nn.Tanh()(v)
 
-        ## Fusion & Classification         
+        ## Fusion & Classification 
+        # when using concat        
         #x = torch.cat((q, v), dim=1)
+        #x = torch.squeeze(x, 1)
+
+        # when using element-wise multiplication
+        #x = torch.mul(q, v)
+        #x = nn.Tanh()(x)
+
+        # when using mutan
         x = self.fusion([v, q])
         
-        #x = torch.squeeze(x, 1)
+        
         #x = nn.Tanh()(x)
         x = self.dropoutF(x)
         x = self.linear1(x)
@@ -84,7 +94,18 @@ class CustomFusionModule(nn.Module):
 
 
 class MultiTaskVQAModel(nn.Module):
-    def __init__(self):
+    def __init__(self,
+                visual_out=768, 
+                question_out=768, 
+                fusion_in=1200, 
+                fusion_hidden=256, 
+                num_answers=95, 
+                dropout_v=0.5, 
+                dropout_q=0.5, 
+                dropout_f=0.5, 
+                use_attention=True,
+                hidden_dimension_attention=512,
+                hidden_dimension_cross=5000):
         super(MultiTaskVQAModel, self).__init__()
 
         # Mapping question types to number of unique answers
@@ -95,16 +116,11 @@ class MultiTaskVQAModel(nn.Module):
             3: 88
         }
 
-        #self.fusion = fusions.Mutan([FUSION_IN, FUSION_IN], FUSION_IN)
-
         self.question_type_to_num_answers = question_type_to_num_answers
-        self.total_num_classes = 95
-
-        # self.selfattention = attention.SelfAttention(FUSION_IN)
-        # self.crossattention = attention.CrossAttention(FUSION_IN)
+        self.total_num_classes = num_answers
 
         self.classifiers = nn.ModuleList([
-            CustomFusionModule(FUSION_IN, FUSION_HIDDEN, num_answers) 
+            CustomFusionModule(visual_out, question_out, fusion_in, fusion_hidden, num_answers, dropout_v, dropout_q, dropout_f, use_attention, hidden_dimension_attention, hidden_dimension_cross) 
             for num_answers in question_type_to_num_answers.values()
         ])
 

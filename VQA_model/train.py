@@ -6,14 +6,9 @@
 
 import json
 from pathlib import Path
-import matplotlib
 from tqdm import tqdm
 
-matplotlib.use('Agg')
-
-
 import datasets.VQADataset_Att as VQADataset
-import torchvision.transforms as T
 import torch
 import numpy as np
 
@@ -22,8 +17,6 @@ import os
 import datetime
 
 import wandb
-from models import model_vit 
-from models import model_vit_bert
 from models import model
 
 def vqa_collate_fn(batch):
@@ -34,7 +27,6 @@ def vqa_collate_fn(batch):
     questions_batch = torch.stack(questions)
     answers_batch = torch.stack(answers)  
     images_batch = torch.stack(images)  
-    # For question_types, you can choose whether to convert to tensor or leave as a list
 
     return questions_batch, answers_batch, images_batch, question_types
 
@@ -243,7 +235,7 @@ if __name__ == '__main__':
         ]
 
     
-    modeltype = 'ViT-BERT-Attention-CONCAT'
+    modeltype = 'ViT-BERT-Attention-MUTAN'
     Dataset = 'HR'
     patch_size = 512   
     num_workers = 6

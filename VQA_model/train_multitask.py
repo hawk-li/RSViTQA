@@ -103,12 +103,10 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             question_type = question_type.to("cuda")
 
             pred = model(image, question, question_type)
-            # print predicted class (index with highest probability)
 
             loss = criterion(pred, answer)
             
             samples_per_task = [(question_type == qt).sum().item() for qt in range(4)]
-            #print(f"Samples per task: {samples_per_task}")
 
             #Calculate initial weights inversely proportional to class frequencies
             weights = [1.0 / (count if count > 0 else 1) for count in samples_per_task]
@@ -122,7 +120,6 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             #Normalize the weights
             weight_sum = sum(weights)
             normalized_weights = [weight / weight_sum for weight in weights] 
-            #print(f"Normalized Weights: {normalized_weights}")
             if i % log_interval == 0:
                 wandb.log({["weight_0", "weight_1", "weight_2", "weight_3"][qt]: normalized_weights[qt] for qt in range(4)})
                 wandb.log({["samples_0", "samples_1", "samples_2", "samples_3"][qt]: samples_per_task[qt]/sum(samples_per_task) for qt in range(4)})
@@ -171,10 +168,10 @@ def train(model, train_dataset, validate_dataset, batch_size, num_epochs, learni
             # Backpropagate the total loss
             loss_total.backward()
 
-            
+            # Now, update all parameters
             for optimizer_head in optimizer_heads:
                 optimizer_head.step()
-            # Now, update all parameters
+            
             #optimizer.step()
             if i % log_interval == 0:
                 wandb.log({"epoch": epoch, "loss": loss})

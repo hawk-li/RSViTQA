@@ -2,7 +2,6 @@ from glob import glob
 import os
 import torch
 from torch.utils.data import Dataset
-from tqdm import tqdm
 import numpy as np
 
 
@@ -24,15 +23,7 @@ class VQADataset(Dataset):
 
         ## Create array with integers from 0 to len(self.image_files) and 0 to len(self.text_files)
         self.image_ids = np.arange(len(self.image_files))
-        self.text_ids = np.arange(len(self.text_files))
-
-        # ## Create dictionary with image_id as key and image as value
-        # self.images = {}
-        # progress_bar = tqdm(self.image_ids, desc="Loading images", total=len(self.image_ids))
-        # for image_id in progress_bar:
-        #     # Load the image
-        #     image = torch.load(os.path.join(visual_path, f"{image_id}.pt"))
-        #     self.images[image_id] = image        
+        self.text_ids = np.arange(len(self.text_files))      
 
     def __len__(self):
         return len(self.text_ids)
@@ -54,4 +45,4 @@ class VQADataset(Dataset):
         # Load the image associated with this Q/A pair
         image = torch.load(os.path.join(self.visual_path, f"{image_id}.pt"))
 
-        return question, answer, image, question_type_idx, question_type_str #, question_str, image_id
+        return question, answer, image, question_type_idx, question_type_str
