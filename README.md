@@ -2,30 +2,12 @@
 
 This is a fork of the original repository, which can be found here: [RSVQA](https://github.com/syvlo/RSVQA)
 
-Adjustments have been made to easily import the HR dataset and start training.
+Adjustments have been made to import the HR dataset and start training.
 
 To set-up the repo for training, follow the steps below:
 
 Download the HR dataset from [zenodo](https://zenodo.org/record/6344367) and place the JSON files in the `data/text` folder.
 Extract and move the images to the `data/images` folder.
-
-Download the pretrained skip-thoughts model files:
-
-
-[http://www.cs.toronto.edu/~rkiros/models/dictionary.txt]('http://www.cs.toronto.edu/~rkiros/models/dictionary.txt')
-[http://www.cs.toronto.edu/~rkiros/models/utable.npy]('http://www.cs.toronto.edu/~rkiros/models/utable.npy')
-[http://www.cs.toronto.edu/~rkiros/models/uni_skip.npz]('http://www.cs.toronto.edu/~rkiros/models/uni_skip.npz')
-[http://www.cs.toronto.edu/~rkiros/models/btable.npy]('http://www.cs.toronto.edu/~rkiros/models/btable.npy')
-[http://www.cs.toronto.edu/~rkiros/models/bi_skip.npz]('http://www.cs.toronto.edu/~rkiros/models/bi_skip.npz')
-
-and place them in the `data/skip-thoughts` folder.
-
-If you receive a decode error when running the `train.py` script, try to change the encoding of the dictionary.txt file to `utf-8` or remove special characters from the file.
-
-```bash
-# remove special characters
-sed -i 's/[^[:print:]]//g' dictionary.txt
-```
 
 Install pytorch with the following command (venv recommended):
 
@@ -41,22 +23,19 @@ pip3 install -r requirements.txt
     
 
 # RSVQA Code
-This readme presents the step required to generate the databases and reproduce the results presented in [1]. Please cite this article if you use this code.
 
-## Automatic generation of the DB:
-The automatic generation of the databases is handled by the scripts in the AutomaticDB folder, and can be launched with the process.py script.
+## Preprocessing
+We include several jupyter notebooks to precompute the embeddings. These can be used to precompute the embeddings for the HR dataset. The notebooks are located in the `perprocessing` folder. For the models using BERT and ViT, `VQA_model\preprocessing\text_preprocessing-bert-attention.ipynb` and `VQA_model\preprocessing\text_preprocessing-vit-attention.ipynb` can be used respectively. Other variations included are for CLS only embeddings, as well as the skip-thoughts embeddings when using the RNN as the text encoder as well as a ResNet as the image encoder respectively.
 
-It works by intersecting geotagged images with elements from OSM.
-It has been checked to work on USGS' ortophotos or S2 tiles.
-You should set the access to the zip files at line 233 of process.py.
-The postgresql DB should be populated with OSM data covering the extent of the images. This OSM data can for instance be obtained here: http://download.geofabrik.de/
+To use the skip-thoughts embeddings (from the previous approach), you will need to download the pretrained skip-thoughts model files:
 
-In AutomaticDB/vqa_database.ini, you should configure the access to a postgresql database, as well as the access to the scentinel hub portal that can be obtained here: https://scihub.copernicus.eu/ (optional, you can also directly download the tiles)
-These fields are marked with "TO_REPLACE"
+[http://www.cs.toronto.edu/~rkiros/models/dictionary.txt]('http://www.cs.toronto.edu/~rkiros/models/dictionary.txt')
+[http://www.cs.toronto.edu/~rkiros/models/utable.npy]('http://www.cs.toronto.edu/~rkiros/models/utable.npy')
+[http://www.cs.toronto.edu/~rkiros/models/uni_skip.npz]('http://www.cs.toronto.edu/~rkiros/models/uni_skip.npz')
+[http://www.cs.toronto.edu/~rkiros/models/btable.npy]('http://www.cs.toronto.edu/~rkiros/models/btable.npy')
+[http://www.cs.toronto.edu/~rkiros/models/bi_skip.npz]('http://www.cs.toronto.edu/~rkiros/models/bi_skip.npz')
 
-## Training the models
-The files regarding the model are put in the VQA_model folder.
-The architecture is defined in models/model.py, and you can use train.py to launch a training.
+and place them in the `data/skip-thoughts` folder.
 
 You will need, in addition to the packages found in requirements.txt, to install skipthoughts:
 
@@ -67,9 +46,24 @@ You will need, in addition to the packages found in requirements.txt, to install
 Available here:
 https://github.com/Cadene/skip-thoughts.torch/tree/master/pytorch
 
+For more information on the skip-thoughts RNN model check out the upstream repository.
 
-# Thanks
-The authors would like to thank Rafael Félix for his remarks and the requirements.txt file.
+## Training and architecture
+The architecture is defined in models/model.py, and you can use train.py to launch a training.
+For the multitask model, you can use the train_multitask.py script. The variation with attention is defined in models/multitask_attention.py.
+A different variation of the multitask model is defined in models/multitask.py, where everything is shared up to the fusion layer.
+
+When instantianting the model, parameters can be passed to specify the output dimensionality of the feature extractors (e.g. if using a bigger feature extractor), as well as the number of neurons in the prediction layers. Defaults are set for vit-base and bert-base-uncased. The type of fusion used can be set directly in the model file.
+
+We use wandb for logging training runs and save a checkpoint of the model at the end of each epoch. The checkpoints are saved in the `outputs` folder.
+We include preliminary code for also training the feature extractors, which is available on the branch `ft-multitask`.
+
+## Evaluation
+
+The evaluation is done using the `computeStats.py` script. You can specify the model to use and the checkpoint to load. The script will load the checkpoint and evaluate the model on the test set. It includes accuracy metrics as well as confusion matrices and a distribution plot for the counting task.
+
 
 # References
+If you use this code, please cite the original paper, which it is based on.
+
 [1] Lobry, Sylvain, et al. "RSVQA: Visual question answering for remote sensing data." IEEE Transactions on Geoscience and Remote Sensing 58.12 (2020): 8555-8566.

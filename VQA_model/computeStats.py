@@ -4,159 +4,105 @@
 @author: sylvain
 """
 
-# Calcul des statistiques sur un jeu de test
+# Used to compute the accuracy of the model on the test set
 
-import VocabEncoder
-import VQALoader
-from models import model
+import utils.VocabEncoder as VocabEncoder
+import datasets.VQADataset_Att as VQADataset
+from models import multitask_attention as model_multitask
+from models import model as model_single
 import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
-
 import torch
-import torchvision.transforms as T
-from torch.autograd import Variable
 from skimage import io
 import numpy as np
-import pickle
 import os
-
-def do_confusion_matrix(all_mat, old_vocab, new_vocab, dataset):
-    print(new_vocab)
-    new_mat = np.zeros((len(new_vocab), len(new_vocab)))
-    for i in range(1,all_mat.shape[0]):
-        answer = old_vocab[i]
-        new_i = new_vocab.index(answer)
-        for j in range(1,all_mat.shape[1]):
-            answer = old_vocab[j]
-            new_j = new_vocab.index(answer)
-            new_mat[new_i, new_j] = all_mat[i, j]
-
-    if len(old_vocab) > 20:#HR
-        new_mat = new_mat[0:18,0:18]
-        new_vocab = new_vocab[0:18]
-    fig = plt.figure(figsize=(10,5))
-    ax = fig.add_subplot(111)
-    cax = ax.matshow(np.log(new_mat+1), cmap="YlGn")
-    #plt.title('Confusion matrix of the classifier')
-    fig.colorbar(cax)
-    ax.set_xticklabels([''] + new_vocab)
-    ax.set_yticklabels([''] + new_vocab)
-    ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
-    ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
-    plt.xlabel('Predicted')
-    plt.ylabel('True')
-    plt.show()
-    fig.savefig('confusion_matrix_' + dataset + '.svg')
-    #plt.close()
-
+from tqdm import tqdm
+import torch.utils.data.dataloader as dataloader
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
         
-
-def get_vocab(dataset):
+def get_vocab():
     work_dir = os.getcwd()
     data_path = work_dir + '/data/text'
-    if dataset == "LR":
-        allanswersJSON = os.path.join(data_path, 'answers.json')
-        encoder_answers = VocabEncoder.VocabEncoder(allanswersJSON, questions=False, range_numbers = True)
-    else:
-        allanswersJSON = os.path.join(data_path, 'USGSanswers.json')
-        encoder_answers = VocabEncoder.VocabEncoder(allanswersJSON, questions=False, range_numbers = False)
+    allanswersJSON = os.path.join(data_path, 'USGSanswers.json')
+    encoder_answers = VocabEncoder.VocabEncoder(allanswersJSON, questions=False, range_numbers = False)
         
     return encoder_answers.getVocab()
 
-def run(experiment, dataset, shuffle=False, num_batches=-1, save_output=False):
-    print ('---' + experiment + '---')
-    batch_size = 100
+def load_model(experiment, type="multitask"):
     work_dir = os.getcwd()
-    data_path = work_dir + '/data'
-    if dataset == "LR":
-        allquestionsJSON = os.path.join(data_path, 'text/questions.json')
-        allanswersJSON = os.path.join(data_path, 'text/answers.json')
-        questionsJSON = os.path.join(data_path, 'text/LR_split_test_questions.json')
-        answersJSON = os.path.join(data_path, 'text/LR_split_test_answers.json')
-        imagesJSON = os.path.join(data_path, 'text/LR_split_test_images.json')
-        images_path = os.path.join(data_path, 'images')
-        encoder_questions = VocabEncoder.VocabEncoder(allquestionsJSON, questions=True)
-        encoder_answers = VocabEncoder.VocabEncoder(allanswersJSON, questions=False, range_numbers = True)
-        patch_size = 256
+    path = os.path.join(work_dir, experiment)
+    if type == "multitask":
+        network = model_multitask.MultiTaskVQAModel().cuda()
     else:
-        allquestionsJSON = os.path.join(data_path, 'text/USGSquestions.json')
-        allanswersJSON = os.path.join(data_path, 'text/USGSanswers.json')
-        if dataset == "HR":
-            questionsJSON = os.path.join(data_path, 'text/USGS_split_test_questions.json')
-            answersJSON = os.path.join(data_path, 'text/USGS_split_test_answers.json')
-            imagesJSON = os.path.join(data_path, 'text/USGS_split_test_images.json')
-        else:
-            questionsJSON = os.path.join(data_path, 'text/USGS_split_test_phili_questions.json')
-            answersJSON = os.path.join(data_path, 'text/USGS_split_test_phili_answers.json')
-            imagesJSON = os.path.join(data_path, 'text/USGS_split_test_phili_images.json')
-        images_path = os.path.join(data_path, 'images')
-        encoder_questions = VocabEncoder.VocabEncoder(allquestionsJSON, questions=True)
-        encoder_answers = VocabEncoder.VocabEncoder(allanswersJSON, questions=False, range_numbers = False)
-        patch_size = 512
-
-    weight_file = 'Model' + experiment + '.pth'
-    network = model.VQAModel(encoder_questions.getVocab(), encoder_answers.getVocab(), input_size = patch_size).cuda()
+        network = model_single.VQAModel().cuda()
     state = network.state_dict()
-    state.update(torch.load(weight_file))
+    state.update(torch.load(path))
     network.load_state_dict(state)
     network.eval().cuda()
-    
-    IMAGENET_MEAN = [0.485, 0.456, 0.406]
-    IMAGENET_STD = [0.229, 0.224, 0.225]
-    transform = T.Compose([
-        T.ToTensor(),            
-        T.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
-      ])
-    test_dataset = VQALoader.VQALoader(images_path, imagesJSON, questionsJSON, answersJSON, encoder_questions, encoder_answers, train=False, ratio_images_to_use=1, transform=transform, patch_size = patch_size)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+    return network
 
-    if dataset == 'LR':
-        countQuestionType = {'rural_urban': 0, 'presence': 0, 'count': 0, 'comp': 0}
-        rightAnswerByQuestionType = {'rural_urban': 0, 'presence': 0, 'count': 0, 'comp': 0}
-    else:
-        countQuestionType = {'area': 0, 'presence': 0, 'count': 0, 'comp': 0}
-        rightAnswerByQuestionType = {'area': 0, 'presence': 0, 'count': 0, 'comp': 0}
-    confusionMatrix = np.zeros((len(encoder_answers.getVocab()), len(encoder_answers.getVocab())))
+def get_image(image_id):
+    work_dir = os.getcwd()
+    images_path = os.path.join(work_dir + "/data/images", str(int(image_id)) + '.png')
+    image = io.imread(images_path)
+    return image
+
+def load_dataset(text_path, images_path, batch_size=100, num_workers=6):
+    test_dataset = VQADataset.VQADataset(text_path, images_path)
+    test_loader = dataloader.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, persistent_workers=True, pin_memory=True, num_workers=num_workers)
+
+    return test_loader
+
+def run(network, text_path, images_path, experiment, dataset, num_batches=-1, save_output=False):
+    test_dataset = VQADataset.VQADataset(text_path, images_path)
+    test_loader = dataloader.DataLoader(test_dataset, batch_size=70, shuffle=False, persistent_workers=True, pin_memory=True, num_workers=6)
     
-    for i, data in enumerate(test_loader, 0):
+    print ('---' + experiment + '---')
+    countQuestionType = {'area': 0, 'presence': 0, 'count': 0, 'comp': 0}
+    rightAnswerByQuestionType = {'area': 0, 'presence': 0, 'count': 0, 'comp': 0}
+    encoder_answers = get_vocab()
+    confusionMatrix = np.zeros((len(encoder_answers), len(encoder_answers)))
+    progress_bar = tqdm(enumerate(test_loader, 0), total=len(test_loader))
+    count_preds = []
+    count_answers = []
+    count_absoulte_error = []
+    count_mean_squared_error = []
+    for i, data in progress_bar:
         if num_batches == 0:
             break
         num_batches -= 1
-        if i % 100 == 99:
-            print(float(i) / len(test_loader))
-        question, answer, image, type_str, image_original = data
-        question = Variable(question.long()).cuda()
-        answer = Variable(answer.long()).cuda().resize_(question.shape[0])
-        if shuffle:
-            order = np.array(range(image.shape[0]))
-            np.random.shuffle(order)
-            image[np.array(range(image.shape[0]))] = image[order]
-        image = Variable(image.float()).cuda()
-        pred = network(image,question)
+        question, answer, image, type_idx, type_str = data
+        answer = answer.squeeze(1).to("cuda")
+        question = question.to("cuda")
+        image = image.to("cuda")
+
+        pred = network(image,question, type_idx)
         
         answer = answer.cpu().numpy()
         pred = np.argmax(pred.cpu().detach().numpy(), axis=1)
-        
+
+        # decode answer and pred
+        answers = [encoder_answers[a] for a in answer]
+        preds = [encoder_answers[p] for p in pred]
+        type_string = [t for t in type_str]
+
+        for t, i in zip(type_string, range(len(type_string))):
+            if t == "count":
+                # check if answer is a number, if not, skip for a fair comparison since multitask model knows the question type
+                try: 
+                    temp = int(preds[i])
+                except ValueError:
+                    continue
+                count_preds.append(int(preds[i]))
+                count_answers.append(int(answers[i]))
+                count_absoulte_error.append(abs(int(preds[i]) - int(answers[i])))
+                count_mean_squared_error.append((int(preds[i]) - int(answers[i]))**2)
+
         for j in range(answer.shape[0]):
             countQuestionType[type_str[j]] += 1
             if answer[j] == pred[j]:
                 rightAnswerByQuestionType[type_str[j]] += 1
             confusionMatrix[answer[j], pred[j]] += 1
-            
-        if save_output:
-            out_path = os.path.join(work_dir, 'output')
-            if not os.path.exists(out_path):
-                os.mkdir(out_path)
-            for j in range(batch_size):
-                viz_img = T.ToPILImage()(image_original[j].float().data.cpu())
-                viz_question = encoder_questions.decode(question[j].data.cpu().numpy())
-                viz_answer = encoder_answers.decode([answer[j]])
-                viz_pred = encoder_answers.decode([pred[j]])
-            
-                imname = str(i * batch_size + j) + '_q_' + viz_question + '_gt_' + viz_answer + '_pred_' + viz_pred + '.png'
-                # replace special characters
-                imname = imname.replace('?', '')
-                plt.imsave(os.path.join(out_path, imname), viz_img)
     
     Accuracies = {'AA': 0}
     for type_str in countQuestionType.keys():
@@ -169,75 +115,103 @@ def run(experiment, dataset, shuffle=False, num_batches=-1, save_output=False):
         print (' - ' + type_str + ': ' + str(Accuracies[type_str]))
     print('- AA: ' + str(Accuracies['AA']))
     print('- OA: ' + str(Accuracies['OA']))
+    combined_list = [int(item) for item in count_preds + count_answers]
+    unique_labels = np.unique(combined_list)
+    sorted_labels = np.sort(unique_labels)
+    cm = confusion_matrix(count_answers, count_preds, labels=sorted_labels)
+    # convert confusion matrix to list and save
+    confusionMatrix = cm.copy().tolist()
+    # save confusion matrix
+    np.save('confusion_matrix_' + experiment.split('/')[0], confusionMatrix)
+    cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+    # Plotting the confusion matrix with annotations
+    plt.figure(figsize=(24,20))
+    sns.heatmap(cm_normalized, annot=False, fmt='d', xticklabels=sorted_labels, yticklabels=sorted_labels)
+    plt.xlabel('Predicted')
+    plt.ylabel('Ground Truth')
+    plt.title('Confusion Matrix')
+    plt.savefig('confusion_matrix_' + experiment.split('/')[0] + '.png', dpi=300, bbox_inches='tight')
+
+    print(f"MAE: {np.mean(count_absoulte_error)}")
+    print(f"MSE: {np.mean(count_mean_squared_error)}")
+    print(f"Average count: {np.mean(count_preds)}")
+    print(f"Average answer: {np.mean(count_answers)}")
+
+    # second heatmap with not normalized confusion matrix
+    plt.figure(figsize=(24,20))
+    sns.heatmap(cm, annot=False, fmt='.2f', xticklabels=sorted_labels, yticklabels=sorted_labels)
+    plt.xlabel('Predicted')
+    plt.ylabel('Ground Truth')
+    plt.title('Confusion Matrix')
+    plt.savefig('confusion_matrix_' + experiment.split('/')[0] + '_abs.png', dpi=300, bbox_inches='tight')
+
+    cm_log_scale = np.log(cm + 1)  # Adding 1 to avoid log(0)
+
+    plt.figure(figsize=(24,20))
+    sns.heatmap(cm_log_scale, annot=False, fmt="d", yticklabels=sorted_labels, xticklabels=sorted_labels)
+    plt.xlabel('Predicted')
+    plt.ylabel('Ground Truth')
+    plt.title('Confusion Matrix (Log Scale)')
+    plt.savefig('confusion_matrix_' + experiment.split('/')[0] + '_log.png', dpi=300, bbox_inches='tight')
+
+    # Plotting individual distributions
+    plt.figure(figsize=(12, 6))
+
+    # Plot for 'answers'
+    plt.subplot(1, 2, 1)
+    plt.hist(count_answers, bins=range(0, 55), alpha=0.7, color='blue')
+    plt.title('Ground Truth Distribution')
+    plt.xlabel('Counts')
+    plt.ylabel('Frequency')
+
+    # Plot for 'preds'
+    plt.subplot(1, 2, 2)
+    plt.hist(count_preds, bins=range(2, 55), alpha=0.7, color='green')
+    plt.title('Predictions Distribution')
+    plt.xlabel('Counts')
+    plt.ylabel('Frequency')
+
+    plt.tight_layout()
+    plt.savefig('individual_distributions_' + experiment.split('/')[0] + '.png', dpi=300, bbox_inches='tight')
+    plt.show()
+
+    # Plotting overlapping distributions
+    plt.figure(figsize=(6, 6))
+    plt.hist(count_answers, bins=range(0, 55), alpha=0.5, label='Ground Truth', color='blue')
+    plt.hist(count_preds, bins=range(0, 55), alpha=0.5, label='Predictions', color='green')
+    plt.title('Overlapping Distributions')
+    plt.xlabel('Counts')
+    plt.ylabel('Frequency')
+    plt.ylim(0, 40000)
+    plt.legend()
+    plt.savefig('overlapping_distributions_' + experiment.split('/')[1] + '.png', dpi=300, bbox_inches='tight')
+    plt.show()
+
     
     return Accuracies, confusionMatrix
 
+if __name__ == '__main__':
+    expes = {
+            'HR': ['outputs/ViT-Bert-Attention-Multitask-MUTAN_lr_1e-05_batch_size_70_run_12-28_01_13/RSVQA_model_epoch_29.pth'],
+    }
+    work_dir = os.getcwd()
+    data_path = work_dir + '/data'
+    images_path = os.path.join(data_path, 'image_representations_vit_att')
+    text_path = os.path.join(data_path, 'text_representations_bert/test_q_str')
 
-#expes = {'LRs': ['427f37d306ef4d03bb1406d5cd20336f', 'bd1387960b624257b9a50924d8134be6', '899e11235c624ec9bbb66e26da52d6fc'],
-#         'LR': ['427f37d306ef4d03bb1406d5cd20336f', 'bd1387960b624257b9a50924d8134be6', '899e11235c624ec9bbb66e26da52d6fc'],
-#         'HR': ['65f94a4f7ccd491da362f73e46795d26', '988853ae5d5e441695f98ee506021bdf', '3bfd251cafb74d379d02bf59d383381a'],
-#         'HRPhili': ['65f94a4f7ccd491da362f73e46795d26', '988853ae5d5e441695f98ee506021bdf', '3bfd251cafb74d379d02bf59d383381a'],
-#         'HRs': ['65f94a4f7ccd491da362f73e46795d26', '988853ae5d5e441695f98ee506021bdf', '3bfd251cafb74d379d02bf59d383381a'],
-#         'HRPhilis': ['65f94a4f7ccd491da362f73e46795d26', '988853ae5d5e441695f98ee506021bdf', '3bfd251cafb74d379d02bf59d383381a']}
-expes = {
-         'HR': ['RSVQA'],
-         'HRPhili': ['RSVQA'],
-}
-#run('RSVQA', 'HR', num_batches=5, save_output=True)
-#run('65f94a4f7ccd491da362f73e46795d26', 'HRPhili', num_batches=5, save_output=True)
-#run('427f37d306ef4d03bb1406d5cd20336f', 'LR', num_batches=5, save_output=True)
-for dataset in expes.keys():
-    acc = []
-    mat = []
-    for experiment_name in expes[dataset]:
-        if not os.path.isfile('accuracies_' + dataset + '_' + experiment_name + '.npy'):
-            if dataset[-1] == 's':
-                tmp_acc, tmp_mat = run(experiment_name, dataset[:-1], shuffle=True)
-            else:
-                tmp_acc, tmp_mat = run(experiment_name, dataset)
-            np.save('accuracies_' + dataset + '_' + experiment_name, tmp_acc)
-            np.save('confusion_matrix_' + dataset + '_' + experiment_name, tmp_mat)
-        else:
-            tmp_acc = np.load('accuracies_' + dataset + '_' + experiment_name + '.npy', allow_pickle=True)[()]
-            tmp_mat = np.load('confusion_matrix_' + dataset + '_' + experiment_name + '.npy', allow_pickle=True)[()]
-        acc.append(tmp_acc)
-        mat.append(tmp_mat)
-        
-    print('--- Total (' + dataset + ') ---')
-    print('- Accuracies')
-    for type_str in tmp_acc.keys():
-        all_acc = []
-        for tmp_acc in acc:
-            all_acc.append(tmp_acc[type_str])
-        print(' - ' + type_str + ': ' + str(np.mean(all_acc)) + ' ( stddev = ' + str(np.std(all_acc)) + ')')
-    
-    if dataset[-1] == 's':
-        vocab = get_vocab(dataset[:-1])
-    else:
-        vocab = get_vocab(dataset)
-
-    all_mat = np.zeros(tmp_mat.shape)    
-    for tmp_mat in mat:
-        all_mat += tmp_mat
-    
-    if dataset[0] == 'H':
-        new_vocab = ['yes', 'no', '0m2', 'between 0m2 and 10m2', 'between 10m2 and 100m2', 'between 100m2 and 1000m2', 'more than 1000m2'] + [str(i) for i in range(90)]
-    else:
-        new_vocab = ['yes', 'no', 'rural', 'urban', '0', 'between 0 and 10', 'between 10 and 100', 'between 100 and 1000', 'more than 1000']
-        
-    do_confusion_matrix(all_mat, vocab, new_vocab, dataset)
-
-
-#labels = ['Yes', 'No', '<=10', '0', '<=100', '<=1000', '>1000', 'Rural', 'Urban']
-#fig = plt.figure()
-#ax = fig.add_subplot(111)
-#cax = ax.matshow(np.log(confusionMatrix[1:,1:] + 1), cmap="YlGn")
-##plt.title('Confusion matrix of the classifier')
-#fig.colorbar(cax)
-#ax.set_xticklabels([''] + labels)
-#ax.set_yticklabels([''] + labels)
-#plt.xlabel('Predicted')
-#plt.ylabel('True')
-#plt.show()
-#fig.savefig(os.path.join(baseFolder, 'AccMatrix.pdf'))
-#print(Accuracies)
+    for dataset in expes.keys():
+        acc = []
+        mat = []
+        for experiment_name in expes[dataset]:
+            model_att = load_model(experiment_name, type="multitask")
+            tmp_acc, tmp_mat = run(model_att, text_path, images_path, experiment_name, dataset)
+            acc.append(tmp_acc)
+            mat.append(tmp_mat)
+            
+        print('--- Total (' + dataset + ') ---')
+        print('- Accuracies')
+        for type_str in tmp_acc.keys():
+            all_acc = []
+            for tmp_acc in acc:
+                all_acc.append(tmp_acc[type_str])
+            print(' - ' + type_str + ': ' + str(np.mean(all_acc)) + ' ( stddev = ' + str(np.std(all_acc)) + ')')

@@ -1,70 +1,80 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Nov 30 09:55:48 2018
-
-@author: sylvain
-"""
-
 from torchvision import models as torchmodels
 import torch.nn as nn
-import models.seq2vec
 import torch.nn.functional as F
 import torch
-import os
-
-VISUAL_OUT = 2048
-QUESTION_OUT = 2400
-FUSION_IN = 1200
-FUSION_HIDDEN = 256
-DROPOUT_V = 0.5
-DROPOUT_Q = 0.5
-DROPOUT_F = 0.5
+from models.attention import SelfAttentionQuestion, CrossAttention, SelfAttentionImage
+from block import fusions
 
 class VQAModel(nn.Module):
-    def __init__(self, vocab_questions, vocab_answers, input_size = 512):
+    def __init__(self, 
+                 visual_out=768, 
+                 question_out=768, 
+                 fusion_in=1200, 
+                 fusion_hidden=256, 
+                 num_classes=95, 
+                 dropout_v=0.5, 
+                 dropout_q=0.5, 
+                 dropout_f=0.5, 
+                 use_attention=True,
+                 hidden_dimension_attention=512,
+                 hidden_dimension_cross=5000):
+        
         super(VQAModel, self).__init__()
+                
+        ## Dropouts
+        self.dropoutV = torch.nn.Dropout(dropout_v)
+        self.dropoutQ = torch.nn.Dropout(dropout_q)
+        self.dropoutF = torch.nn.Dropout(dropout_f)
+
+        ## Attention Modules
+        if use_attention:
+            self.selfattention_q = SelfAttentionQuestion(question_out, hidden_dimension_attention, 1)
+            self.crossattention = CrossAttention(hidden_dimension_cross, question_out, visual_out)
+            self.selfattention_v = SelfAttentionImage(hidden_dimension_cross, hidden_dimension_attention, 1)
+
+        ## Prepare Fusion
+        self.linear_q = nn.Linear(question_out, fusion_in)
+        self.linear_v = nn.Linear(visual_out, fusion_in)
+
+        ## Fusion Layer 
+        self.fusion = fusions.Mutan([fusion_in, fusion_in], fusion_hidden)
         
-        self.vocab_questions = vocab_questions
-        self.vocab_answers = vocab_answers
-        self.num_classes = len(self.vocab_answers)
-        
-        self.dropoutV = torch.nn.Dropout(DROPOUT_V)
-        self.dropoutQ = torch.nn.Dropout(DROPOUT_Q)
-        self.dropoutF = torch.nn.Dropout(DROPOUT_F)
-        work_dir = work_dir = os.getcwd()
-        dir_st = work_dir + '/data/skip-thoughts'
-        self.seq2vec = models.seq2vec.factory(self.vocab_questions, {'arch': 'skipthoughts', 'dir_st': dir_st, 'type': 'BayesianUniSkip', 'dropout': 0.25, 'fixed_emb': False})
-        for param in self.seq2vec.parameters():
-            param.requires_grad = False
-        self.linear_q = nn.Linear(QUESTION_OUT, FUSION_IN)
-        
-        self.visual = torchmodels.resnet152(pretrained=True)
-        extracted_layers = list(self.visual.children())
-        extracted_layers = extracted_layers[0:8] #Remove the last fc and avg pool
-        self.visual = torch.nn.Sequential(*(list(extracted_layers)))
-        for param in self.visual.parameters():
-            param.requires_grad = False
-        
-        output_size = (input_size / 32)**2
-        self.visual = torch.nn.Sequential(self.visual, torch.nn.Conv2d(2048,int(2048/output_size),1))
-        self.linear_v = nn.Linear(VISUAL_OUT, FUSION_IN)
-        
-        self.linear_classif1 = nn.Linear(FUSION_IN, FUSION_HIDDEN)
-        self.linear_classif2 = nn.Linear(FUSION_HIDDEN, self.num_classes)
+        ## Classification layers
+        self.linear_classif1 = nn.Linear(fusion_in, fusion_hidden) # for concat, FUSION_IN*2
+        self.linear_classif2 = nn.Linear(fusion_hidden, num_classes)
+
         
     def forward(self, input_v, input_q):
-        x_v = self.visual(input_v).view(-1, VISUAL_OUT)
-        x_v = self.dropoutV(x_v)
-        x_v = self.linear_v(x_v)
-        x_v = nn.Tanh()(x_v)
+
+        ## Dropouts
+        input_q = self.dropoutQ(input_q)
+        input_v = self.dropoutV(input_v)
         
-        x_q = self.seq2vec(input_q)
-        x_q = self.dropoutV(x_q)
-        x_q = self.linear_q(x_q)
-        x_q = nn.Tanh()(x_q)
+        ## Self-Attention for Question
+        if hasattr(self, 'selfattention_q'):
+            q = self.selfattention_q(input_q)
+            c = self.crossattention(q, input_v)
+            v = self.selfattention_v(c, input_v)
+    
+        ## Prepare fusion
+        q = self.linear_q(q)
+        q = nn.Tanh()(q)
+        v = self.linear_v(v)
+        v = nn.Tanh()(v)
+
+        ## Fusion & Classification
+
+        # multiplication         
+        #x = torch.mul(v, q)
+
+        # concatenation
+        #x = torch.cat((v, q), 1)
+        #x = torch.squeeze(x, 1)
         
-        x = torch.mul(x_v, x_q)
+        # mutan
+        x = self.fusion([v, q])
+        
+        # use tanh for multiplication, optional for concatenation and mutan
         x = nn.Tanh()(x)
         x = self.dropoutF(x)
         x = self.linear_classif1(x)
@@ -73,4 +83,3 @@ class VQAModel(nn.Module):
         x = self.linear_classif2(x)
         
         return x
-        
