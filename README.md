@@ -25,7 +25,7 @@ pip3 install -r requirements.txt
 # RSVQA Code
 
 ## Preprocessing
-We include several jupyter notebooks to precompute the embeddings. These can be used to precompute the embeddings for the HR dataset. The notebooks are located in the `perprocessing` folder. For the models using BERT and ViT, `VQA_model\preprocessing\text_preprocessing-bert-attention.ipynb` and `VQA_model\preprocessing\text_preprocessing-vit-attention.ipynb` can be used respectively. Other variations included are for CLS only embeddings, as well as the skip-thoughts embeddings when using the RNN as the text encoder as well as a ResNet as the image encoder respectively.
+We include several jupyter notebooks to precompute the embeddings. These can be used to precompute the embeddings for the HR dataset. The notebooks are located in the `perprocessing` folder. For the models using BERT and ViT, `VQA_model\preprocessing\text_preprocessing-bert-attention.ipynb` and `VQA_model\preprocessing\text_preprocessing-vit-attention.ipynb` can be used respectively. Other variations included are for CLS only embeddings.
 
 For more information on the skip-thoughts RNN model used previously check out the upstream repository.
 
