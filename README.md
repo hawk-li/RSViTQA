@@ -27,26 +27,7 @@ pip3 install -r requirements.txt
 ## Preprocessing
 We include several jupyter notebooks to precompute the embeddings. These can be used to precompute the embeddings for the HR dataset. The notebooks are located in the `perprocessing` folder. For the models using BERT and ViT, `VQA_model\preprocessing\text_preprocessing-bert-attention.ipynb` and `VQA_model\preprocessing\text_preprocessing-vit-attention.ipynb` can be used respectively. Other variations included are for CLS only embeddings, as well as the skip-thoughts embeddings when using the RNN as the text encoder as well as a ResNet as the image encoder respectively.
 
-To use the skip-thoughts embeddings (from the previous approach), you will need to download the pretrained skip-thoughts model files:
-
-[http://www.cs.toronto.edu/~rkiros/models/dictionary.txt]('http://www.cs.toronto.edu/~rkiros/models/dictionary.txt')
-[http://www.cs.toronto.edu/~rkiros/models/utable.npy]('http://www.cs.toronto.edu/~rkiros/models/utable.npy')
-[http://www.cs.toronto.edu/~rkiros/models/uni_skip.npz]('http://www.cs.toronto.edu/~rkiros/models/uni_skip.npz')
-[http://www.cs.toronto.edu/~rkiros/models/btable.npy]('http://www.cs.toronto.edu/~rkiros/models/btable.npy')
-[http://www.cs.toronto.edu/~rkiros/models/bi_skip.npz]('http://www.cs.toronto.edu/~rkiros/models/bi_skip.npz')
-
-and place them in the `data/skip-thoughts` folder.
-
-You will need, in addition to the packages found in requirements.txt, to install skipthoughts:
-
-    git clone https://github.com/Cadene/skip-thoughts.torch.git
-    cd skip-thoughts.torch/pytorch
-    python setup.py install
-
-Available here:
-https://github.com/Cadene/skip-thoughts.torch/tree/master/pytorch
-
-For more information on the skip-thoughts RNN model check out the upstream repository.
+For more information on the skip-thoughts RNN model used previously check out the upstream repository.
 
 ## Training and architecture
 The architecture is defined in models/model.py, and you can use train.py to launch a training.
