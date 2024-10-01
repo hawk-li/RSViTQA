@@ -45,6 +45,8 @@ The evaluation is done using the `computeStats.py` script. You can specify the m
 
 
 # References
-If you use this code, please cite the original paper, which it is based on.
+If you use this code, please cite our paper as well as the original paper, which it is based on.
 
-[1] Lobry, Sylvain, et al. "RSVQA: Visual question answering for remote sensing data." IEEE Transactions on Geoscience and Remote Sensing 58.12 (2020): 8555-8566.
+[1] Falk, D., Aydin, K., Scheibenreif, L., & Borth, D. (2024). Merging Patches and Tokens: A VQA System for Remote Sensing. In IGARSS 2024 IEEE International Geoscience and Remote Sensing Symposium (pp. 694-698). IEEE.
+
+[2] Lobry, S., Marcos, D., Murray, J., & Tuia, D. (2020). RSVQA: Visual question answering for remote sensing data. IEEE Transactions on Geoscience and Remote Sensing, 58(12), 8555-8566.
